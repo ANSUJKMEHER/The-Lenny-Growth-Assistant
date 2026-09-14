@@ -220,3 +220,26 @@ class OllamaEmbedder:
             raise ProviderError(f"Ollama embeddings HTTP {resp.status_code}")
         data = resp.json()
         return data.get("embedding") or []
+
+    async def embed_batch(self, texts: list[str], batch_size: int = 32) -> list[list[float]]:
+        if not texts:
+            return []
+        url = f"{self.base_url}/api/embed"
+        results: list[list[float]] = []
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                for i in range(0, len(texts), batch_size):
+                    batch = texts[i : i + batch_size]
+                    resp = await client.post(url, json={"model": self.model, "input": batch})
+                    if resp.status_code == 200:
+                        embs = resp.json().get("embeddings") or []
+                        if len(embs) == len(batch):
+                            results.extend(embs)
+                            continue
+                    # Fallback to single embed if batch fails
+                    for t in batch:
+                        results.append(await self.embed(t))
+        except Exception:
+            for t in texts[len(results):]:
+                results.append(await self.embed(t))
+        return results

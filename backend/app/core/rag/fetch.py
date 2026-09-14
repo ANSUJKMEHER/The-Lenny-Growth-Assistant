@@ -78,6 +78,13 @@ async def fetch_official_dataset(
                 stats.sources_skipped += doc_stats.sources_skipped
                 stats.chunks_created += doc_stats.chunks_created
                 stats.errors.extend(doc_stats.errors)
+                await db.commit()
+                logger.info(
+                    "Ingested %s (%d chunks, total: %d)",
+                    entry.get("title") or filename,
+                    doc_stats.chunks_created,
+                    stats.chunks_created,
+                )
             except Exception as exc:  # pragma: no cover - per-file resilience
                 stats.errors.append(f"{filename}: {exc}")
 
@@ -122,7 +129,7 @@ async def ensure_corpus(db: AsyncSession) -> IngestStats:
         return stats
 
     logger.info("Corpus empty — fetching official Lenny's Podcast transcripts")
-    stats = await fetch_official_dataset(db)
+    stats = await fetch_official_dataset(db, limit=10)
     if stats.sources_created == 0:
         if stats.errors:
             logger.warning(

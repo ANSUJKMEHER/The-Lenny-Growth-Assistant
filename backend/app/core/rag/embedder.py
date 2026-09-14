@@ -73,8 +73,14 @@ class EmbeddingService:
         return lexical_vector(text, self.dim)
 
     async def embed_many(self, texts: list[str]) -> list[list[float]]:
-        # Sequential for simplicity; the corpus is small (hundreds of chunks).
-        return [await self.embed(t) for t in texts]
+        if not texts:
+            return []
+        if await self._ollama_available():
+            try:
+                return await self._ollama.embed_batch(texts)
+            except Exception:
+                self._ollama_ok = False
+        return [lexical_vector(t, self.dim) for t in texts]
 
     @staticmethod
     def cosine(a: list[float], b: list[float]) -> float:
