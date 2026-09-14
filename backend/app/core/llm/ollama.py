@@ -17,6 +17,7 @@ from app.core.llm.base import (
     LLMProvider,
     LLMResponse,
     ProviderError,
+    StreamChunk,
     ToolCall,
     ToolSpec,
 )
@@ -135,6 +136,69 @@ class OllamaProvider(LLMProvider):
             finish_reason=data.get("done_reason") or "stop",
             raw=data,
         )
+
+    async def stream(
+        self, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
+    ):
+        """Stream a completion from Ollama's native ``stream=true`` endpoint.
+
+        Yields :class:`StreamChunk` text deltas as they arrive and, at the end of
+        a tool-calling turn, a final chunk carrying the accumulated tool calls.
+        """
+        payload: dict = {
+            "model": self.model,
+            "messages": self._to_ollama(messages),
+            "stream": True,
+            "options": {"temperature": 0.2},
+        }
+        system = self._system_prompt(messages)
+        if system:
+            payload["system"] = system
+        if tools:
+            payload["tools"] = self._to_tools(tools)
+
+        url = f"{self.base_url}/api/chat"
+        tool_calls_by_index: dict[int, ToolCall] = {}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream("POST", url, json=payload) as resp:
+                    if resp.status_code >= 400:
+                        body = (await resp.aread()).decode("utf-8", "replace")
+                        raise ProviderError(f"Ollama HTTP {resp.status_code}: {body[:300]}")
+                    async for line in resp.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        msg = data.get("message") or {}
+                        content = msg.get("content") or ""
+                        if content:
+                            yield StreamChunk(text=content)
+                        for tc in msg.get("tool_calls") or []:
+                            fn = tc.get("function") or {}
+                            args = fn.get("arguments") or {}
+                            if isinstance(args, str):
+                                try:
+                                    args = json.loads(args)
+                                except json.JSONDecodeError:
+                                    args = {}
+                            idx = tc.get("index")
+                            key = idx if isinstance(idx, int) else len(tool_calls_by_index)
+                            tool_calls_by_index[key] = ToolCall(
+                                id=tc.get("id") or f"call_{key}",
+                                name=fn.get("name") or "",
+                                arguments=args,
+                            )
+        except httpx.TimeoutException as exc:
+            raise ProviderError(f"Ollama timed out after {self.timeout}s") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError(f"Ollama unreachable at {self.base_url}: {exc}") from exc
+
+        if tool_calls_by_index:
+            ordered = [tool_calls_by_index[k] for k in sorted(tool_calls_by_index)]
+            yield StreamChunk(tool_calls=ordered)
 
 
 class OllamaEmbedder:

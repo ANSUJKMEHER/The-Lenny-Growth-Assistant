@@ -1,8 +1,9 @@
 /* The Lenny Growth Assistant — frontend.
  *
  * Vanilla JS (no build step) talking to the FastAPI backend. Handles sessions,
- * streaming-free chat, grounded citations (expandable), the provider switcher,
- * the side-by-side artifact viewer, light/dark theme, copy actions, and session
+ * streaming chat (SSE with a non-streaming fallback), grounded citations
+ * (guest + timestamp + source link), the provider switcher, the side-by-side
+ * artifact viewer, light/dark theme, copy/download actions, and session
  * management.
  */
 (() => {
@@ -16,7 +17,7 @@
     currentSessionId: null,
     currentTitle: "New chat",
     config: null,
-    artifacts: [], // artifacts in the current session
+    artifacts: [],
     activeArtifactId: null,
     busy: false,
   };
@@ -159,25 +160,18 @@
   function appendMessage(role, content, citations) {
     const wrap = el("div", `msg ${role}`);
 
-    // Avatar
     const avatar = el("div", "msg-avatar");
     avatar.setAttribute("aria-hidden", "true");
     avatar.appendChild(icon(role === "user" ? "icon-user" : "icon-logo"));
     wrap.appendChild(avatar);
 
     const contentWrap = el("div", "msg-content");
-
     const body = el("div", "msg-body prose");
     body.innerHTML = renderMarkdown(content);
     contentWrap.appendChild(body);
 
-    if (role === "assistant") {
-      contentWrap.appendChild(buildActions(content));
-    }
-
-    if (citations && citations.length) {
-      contentWrap.appendChild(buildCitations(citations));
-    }
+    if (role === "assistant") contentWrap.appendChild(buildActions(content));
+    if (citations && citations.length) contentWrap.appendChild(buildCitations(citations));
 
     wrap.appendChild(contentWrap);
     messagesEl.appendChild(wrap);
@@ -210,25 +204,7 @@
   function buildCitations(citations) {
     const box = el("div", "citations");
     box.appendChild(el("div", "citations-label", "Sources"));
-    for (const c of citations) {
-      const cite = el("div", "citation");
-      const head = el("button", "citation-head");
-      head.type = "button";
-      head.setAttribute("aria-expanded", "false");
-      head.appendChild(el("span", "citation-title", c.title));
-      const chevron = el("span", "citation-chevron");
-      chevron.appendChild(icon("icon-chevron"));
-      head.appendChild(chevron);
-
-      const excerpt = el("div", "citation-excerpt", c.excerpt || "");
-      head.addEventListener("click", () => {
-        const open = cite.classList.toggle("open");
-        head.setAttribute("aria-expanded", String(open));
-      });
-      cite.appendChild(head);
-      cite.appendChild(excerpt);
-      box.appendChild(cite);
-    }
+    for (const c of citations) box.appendChild(citationCard(c));
     return box;
   }
 
@@ -238,7 +214,6 @@
     avatar.setAttribute("aria-hidden", "true");
     avatar.appendChild(icon("icon-logo"));
     wrap.appendChild(avatar);
-
     const contentWrap = el("div", "msg-content");
     const body = el("div", "msg-body");
     const typing = el("span", "typing");
@@ -246,7 +221,6 @@
     body.appendChild(typing);
     contentWrap.appendChild(body);
     wrap.appendChild(contentWrap);
-
     messagesEl.appendChild(wrap);
     scrollToBottom();
     return wrap;
@@ -306,8 +280,12 @@
     });
   }
 
+  function activeArtifact() {
+    return state.artifacts.find((x) => x.id === state.activeArtifactId);
+  }
+
   function renderActiveArtifact() {
-    const a = state.artifacts.find((x) => x.id === state.activeArtifactId);
+    const a = activeArtifact();
     if (!a) return;
     $("#artifactTitle").textContent = a.title;
     artifactBody.innerHTML = "";
@@ -325,6 +303,31 @@
       div.innerHTML = renderMarkdown(a.content);
       artifactBody.appendChild(div);
     }
+  }
+
+  function downloadArtifact(a) {
+    const ext = a.kind === "html" ? "html" : "md";
+    const mime = a.kind === "html" ? "text/html" : "text/markdown";
+    const blob = new Blob([a.content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(a.title || "artifact").replace(/[^a-zA-Z0-9_-]/g, "_")}.${ext}`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function openArtifactInTab(a) {
+    if (a.kind !== "html") return;
+    const escaped = a.content.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    const wrapper =
+      `<!doctype html><html><head><meta charset="utf-8">` +
+      `<style>html,body{margin:0;height:100%}</style></head>` +
+      `<body><iframe sandbox="" referrerpolicy="no-referrer" srcdoc="${escaped}" ` +
+      `style="width:100%;height:100%;border:0"></iframe></body></html>`;
+    const url = URL.createObjectURL(new Blob([wrapper], { type: "text/html" }));
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
 
   // ------------------------------------------------------------------ //
@@ -387,7 +390,7 @@
   }
 
   // ------------------------------------------------------------------ //
-  // Send message
+  // Send message (streaming with fallback)
   // ------------------------------------------------------------------ //
   async function sendMessage(text) {
     if (state.busy || !text.trim()) return;
@@ -397,7 +400,6 @@
 
     appendMessage("user", text);
 
-    // Ensure a session exists.
     if (!state.currentSessionId) {
       const created = await api("/api/sessions", {
         method: "POST",
@@ -410,21 +412,10 @@
 
     const typingEl = appendTyping();
     try {
-      const res = await api(`/api/sessions/${state.currentSessionId}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ content: text }),
-      });
-      typingEl.remove();
-      appendMessage("assistant", res.message.content, res.message.citations);
-      state.currentTitle = state.currentTitle === "New chat"
-        ? (text.slice(0, 60) || "New chat")
-        : state.currentTitle;
-      updateHeader();
-      if (res.artifacts && res.artifacts.length) {
-        setArtifacts([...state.artifacts, ...res.artifacts]);
-        state.activeArtifactId = res.artifacts[res.artifacts.length - 1].id;
-        renderArtifactTabs();
-        renderActiveArtifact();
+      await streamChat(text, typingEl);
+      if (state.currentTitle === "New chat") {
+        state.currentTitle = text.slice(0, 60) || "New chat";
+        updateHeader();
       }
       await loadSessions();
     } catch (err) {
@@ -434,6 +425,187 @@
       state.busy = false;
       sendBtn.disabled = false;
       inputEl.focus();
+    }
+  }
+
+  async function streamChat(text, typingEl) {
+    const res = await fetch(`/api/sessions/${state.currentSessionId}/messages/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text }),
+    });
+
+    if (!res.ok || !res.body) {
+      let msg = `Request failed (${res.status})`;
+      try {
+        const data = await res.json();
+        msg = data.detail || data.error || msg;
+      } catch (_) {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+
+    // Replace the typing indicator with a live assistant bubble.
+    typingEl.remove();
+    const live = createLiveMessage();
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        const line = raw.split("\n").find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        let evt;
+        try {
+          evt = JSON.parse(line.slice(6));
+        } catch (_) {
+          continue;
+        }
+        handleStreamEvent(evt, live);
+      }
+    }
+    live.finish();
+  }
+
+  function createLiveMessage() {
+    const wrap = el("div", "msg assistant");
+    const avatar = el("div", "msg-avatar");
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.appendChild(icon("icon-logo"));
+    wrap.appendChild(avatar);
+
+    const contentWrap = el("div", "msg-content");
+    const statusEl = el("div", "msg-status");
+    const body = el("div", "msg-body prose");
+    body.classList.add("streaming");
+    contentWrap.appendChild(statusEl);
+    contentWrap.appendChild(body);
+    wrap.appendChild(contentWrap);
+    messagesEl.appendChild(wrap);
+
+    let content = "";
+    let lastRender = 0;
+    const citationsBox = el("div", "citations");
+    const actions = buildActionsRef();
+
+    return {
+      wrap,
+      body,
+      statusEl,
+      citationsBox,
+      actions,
+      appendToken(token) {
+        content += token;
+        const now = Date.now();
+        if (now - lastRender > 60) {
+          body.innerHTML = renderMarkdown(content);
+          lastRender = now;
+          scrollToBottom();
+        }
+      },
+      setStatus(text) {
+        statusEl.textContent = text;
+        statusEl.hidden = !text;
+        scrollToBottom();
+      },
+      finish() {
+        body.innerHTML = renderMarkdown(content);
+        body.classList.remove("streaming");
+        statusEl.hidden = true;
+        contentWrap.appendChild(actions);
+        contentWrap.appendChild(citationsBox);
+        scrollToBottom();
+        return content;
+      },
+      setCitations(citations) {
+        citationsBox.innerHTML = "";
+        if (citations && citations.length) {
+          citationsBox.appendChild(el("div", "citations-label", "Sources"));
+          for (const c of citations) citationsBox.appendChild(citationCard(c));
+        }
+      },
+    };
+  }
+
+  function buildActionsRef() {
+    const actions = el("div", "msg-actions");
+    return actions;
+  }
+
+  function citationCard(c) {
+    const cite = el("div", "citation");
+    const head = el("button", "citation-head");
+    head.type = "button";
+    head.setAttribute("aria-expanded", "false");
+
+    const left = el("span", "citation-head-left");
+    left.appendChild(el("span", "citation-title", c.title));
+    const metaParts = [];
+    if (c.speaker) metaParts.push(c.speaker);
+    if (c.timestamp) metaParts.push(c.timestamp);
+    if (metaParts.length) left.appendChild(el("span", "citation-meta", metaParts.join(" · ")));
+    head.appendChild(left);
+    const chevron = el("span", "citation-chevron");
+    chevron.appendChild(icon("icon-chevron"));
+    head.appendChild(chevron);
+
+    const excerpt = el("div", "citation-excerpt", c.excerpt || "");
+    if (c.url) {
+      const link = el("a", "citation-link", "View source ↗");
+      link.href = c.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.addEventListener("click", (e) => e.stopPropagation());
+      excerpt.appendChild(link);
+    }
+
+    head.addEventListener("click", () => {
+      const open = cite.classList.toggle("open");
+      head.setAttribute("aria-expanded", String(open));
+    });
+    cite.appendChild(head);
+    cite.appendChild(excerpt);
+    return cite;
+  }
+
+  function handleStreamEvent(evt, live) {
+    switch (evt.type) {
+      case "status":
+        live.setStatus(evt.data || "");
+        break;
+      case "token":
+        live.appendToken(evt.data || "");
+        break;
+      case "error":
+        live.setStatus("");
+        live.appendToken(`\n\n⚠️ **${evt.data}**`);
+        break;
+      case "done": {
+        const data = evt.data || {};
+        live.setStatus("");
+        live.finish();
+        if (data.message) {
+          live.setCitations(data.message.citations);
+        }
+        if (data.artifacts && data.artifacts.length) {
+          setArtifacts([...state.artifacts, ...data.artifacts]);
+          state.activeArtifactId = data.artifacts[data.artifacts.length - 1].id;
+          renderArtifactTabs();
+          renderActiveArtifact();
+        }
+        break;
+      }
+      default:
+        break;
     }
   }
 
@@ -514,8 +686,16 @@
   $("#newChatBtn").addEventListener("click", newChat);
   $("#closeArtifact").addEventListener("click", () => (artifactPanel.hidden = true));
   $("#copyArtifact").addEventListener("click", () => {
-    const a = state.artifacts.find((x) => x.id === state.activeArtifactId);
+    const a = activeArtifact();
     if (a) copyText(a.content, "Artifact copied");
+  });
+  $("#downloadArtifact").addEventListener("click", () => {
+    const a = activeArtifact();
+    if (a) downloadArtifact(a);
+  });
+  $("#openArtifact").addEventListener("click", () => {
+    const a = activeArtifact();
+    if (a) openArtifactInTab(a);
   });
 
   $("#themeToggle").addEventListener("click", () => {
@@ -538,7 +718,6 @@
     }
   });
 
-  // Suggestion chips.
   document.querySelectorAll(".suggestion").forEach((btn) => {
     btn.addEventListener("click", () => {
       const prompt = btn.dataset.prompt;
@@ -548,7 +727,6 @@
     });
   });
 
-  // Sidebar toggle (mobile).
   $("#sidebarToggle").addEventListener("click", () => {
     $("#sidebar").classList.toggle("open");
   });

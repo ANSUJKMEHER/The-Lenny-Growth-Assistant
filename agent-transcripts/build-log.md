@@ -114,11 +114,41 @@ the skill if the provider can't cooperate. Covered by `test_ship30_skill_does_no
 **Result:** 30 tests pass; UI verified in both themes (no console errors; graceful
 `503` renders as a styled error bubble).
 
+## Iteration 10 — Real grounding, deep citations, streaming, run.sh
+
+**What:** a side-by-side review against a peer submission surfaced four concrete
+gaps: (1) only 3 synthetic `[SAMPLE]` transcripts vs. real data, (2) citations
+lacked guest/timestamp/source links, (3) no streaming (a big perceived-quality
+loss on slow local models), and (4) no one-command bootstrap.
+
+**Corrections:**
+- **Real corpus** — added `core/rag/fetch.py`, which fetches the official
+  `LennysNewsletter/lennys-newsletterpodcastdata` starter pack (50 real episodes)
+  at runtime and ingests it (idempotent, raw files never committed). `ensure_corpus`
+  runs on first boot, falling back to the bundled samples offline.
+- **Speaker/timestamp chunking** — added `chunk_speaker_turns()` + `parse_speaker_turns()`
+  so speaker-labelled transcripts are chunked with per-chunk `speaker` + `timestamp`
+  metadata (new `Chunk` columns). Citations now carry guest + timestamp + source URL.
+- **Streaming** — added a provider `stream()` contract (native for Ollama, single-shot
+  fallback for others), an `Agent.run_stream()` event loop (`token`/`tool`/`done`),
+  and `POST /api/sessions/{id}/messages/stream` (SSE). The frontend consumes SSE with
+  a non-streaming fallback and shows progress statuses.
+- **Bootstrap** — added `./run.sh` (starts Ollama, pulls models, boots via Docker
+  Compose or local fallback).
+
+**Failure / correction:** the first streaming refactor left a stray `_history_for`
+stub and compared `ev.kind == AgentEvent` (class) instead of a string; caught by
+inspection before running, rewrote `chat.py` cleanly with a shared `_prepare_turn` /
+`_finalize_turn` split.
+
+**Result:** 36 tests pass; verified live fetch (50 episodes → 4,622 chunks) and the
+SSE endpoint's graceful 503 (no provider) path.
+
 ## Verification
 
-- `pytest -q` → **30 passed** (retrieval, chunking, security, ingestion, agent,
-  skills + length enforcement, API validation + graceful LLM failure, and
-  agent-runtime selection).
+- `pytest -q` → **36 passed** (retrieval, speaker-turn chunking, security,
+  ingestion, agent + skills + length enforcement, API validation + graceful LLM
+  failure + streaming endpoint, and agent-runtime selection).
 - Smoke test: server boots, `/health` and `/health/ready` return correct status,
   frontend + static assets serve, all 11 API routes registered in OpenAPI.
 

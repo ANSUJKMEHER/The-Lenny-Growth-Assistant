@@ -58,3 +58,29 @@ async def test_retrieval_empty_corpus(db):
     retriever = Retriever()
     results = await retriever.retrieve(db, "anything")
     assert results == []
+
+
+async def test_speaker_transcript_sets_chunk_metadata(db):
+    text = (
+        "**Lenny Rachitsky** (00:00:00):\nWelcome to the show.\n\n"
+        "**Shreyas Doshi** (00:01:00):\nPre-mortems surface Tigers and Paper Tigers. "
+        "Elephants are the ignored big risks that sink a launch.\n"
+    )
+    stats, source = await ingest.ingest_document(
+        db, text, title="Pre-mortems", episode_id="23", speaker="Shreyas Doshi"
+    )
+    await db.commit()
+    assert stats.sources_created == 1
+
+    chunks = (
+        await db.execute(select(Chunk).where(Chunk.source_id == source.id))
+    ).scalars().all()
+    assert chunks
+    assert any(c.speaker for c in chunks)
+    assert any(c.timestamp for c in chunks)
+
+    # The retriever should surface speaker/timestamp in its results.
+    results = await Retriever().retrieve(db, "pre-mortems", top_k=3)
+    assert results
+    assert results[0].speaker
+    assert results[0].timestamp

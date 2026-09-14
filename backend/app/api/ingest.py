@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.rag import ingest
+from app.core.rag import fetch, ingest
 from app.db import get_db
 from app.models import Chunk, TranscriptSource
 from app.schemas import IngestResult, SourceOut
@@ -24,6 +24,14 @@ class IngestUrlRequest(BaseModel):
 @router.post("/ingest/seed", response_model=IngestResult)
 async def seed(db: AsyncSession = Depends(get_db)) -> IngestResult:
     stats = await ingest.seed_samples(db)
+    await db.commit()
+    return IngestResult(**stats.__dict__)
+
+
+@router.post("/ingest/fetch", response_model=IngestResult)
+async def fetch_official(db: AsyncSession = Depends(get_db)) -> IngestResult:
+    """Fetch + ingest the official Lenny's Podcast starter pack (50 episodes)."""
+    stats = await fetch.fetch_official_dataset(db)
     await db.commit()
     return IngestResult(**stats.__dict__)
 

@@ -68,6 +68,14 @@ class LLMResponse:
     raw: Any = None
 
 
+@dataclass
+class StreamChunk:
+    """A single increment of a streaming completion."""
+
+    text: str = ""
+    tool_calls: list[ToolCall] = field(default_factory=list)
+
+
 def _json_dumps(obj: Any) -> str:
     import json
 
@@ -85,6 +93,18 @@ class LLMProvider(ABC):
         self, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
     ) -> LLMResponse:
         """Run a single completion with optional tools."""
+
+    async def stream(
+        self, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
+    ):
+        """Stream a completion as :class:`StreamChunk` increments.
+
+        The default implementation is a single-shot fallback: it calls
+        :meth:`complete` and yields the whole result as one chunk. Providers
+        that support native streaming override this (see Ollama).
+        """
+        resp = await self.complete(messages, tools=tools)
+        yield StreamChunk(text=resp.content, tool_calls=resp.tool_calls)
 
     async def healthcheck(self) -> tuple[bool, str | None]:
         """Return (available, reason_if_not)."""

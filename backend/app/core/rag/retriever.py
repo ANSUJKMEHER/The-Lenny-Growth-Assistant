@@ -36,6 +36,9 @@ class RetrievedChunk:
     chunk_index: int
     score: float
     method: str  # "embedding" | "bm25"
+    speaker: str | None = None
+    timestamp: str | None = None
+    url: str | None = None
 
 
 def _tokenize(text: str) -> list[str]:
@@ -143,4 +146,7 @@ class Retriever:
             chunk_index=chunk.index,
             score=round(float(score), 4),
             method=method,
+            speaker=chunk.speaker,
+            timestamp=chunk.timestamp,
+            url=source.url,
         )

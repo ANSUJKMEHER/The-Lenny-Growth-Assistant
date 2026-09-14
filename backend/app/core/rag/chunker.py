@@ -12,12 +12,28 @@ from dataclasses import dataclass
 
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 
+# Speaker-turn label in podcast transcripts, e.g. "**Keith Rabois** (00:12:34):".
+_TURN_LABEL_RE = re.compile(
+    r"\*\*\s*([^*\n]+?)\s*\*\*\s*\((\d{1,2}:\d{2}(?::\d{2})?)\)\s*:\s*"
+)
+
 
 @dataclass
 class Chunk:
     index: int
     text: str
     token_count: int
+
+
+@dataclass
+class SpeakerChunk:
+    """A chunk that also knows which speaker/timestamp it starts at."""
+
+    index: int
+    text: str
+    token_count: int
+    speaker: str | None
+    timestamp: str | None
 
 
 def approximate_tokens(text: str) -> int:
@@ -82,6 +98,94 @@ def chunk_text(
         if buffer_tokens + t > target_tokens and buffer:
             flush()
         buffer.append(sentence)
+        buffer_tokens += t
+
+    flush()
+    return chunks
+
+
+def parse_speaker_turns(text: str) -> list[tuple[str, str, str]]:
+    """Split a speaker-labelled transcript into (speaker, timestamp, turn_text).
+
+    Expects the podcast format ``**Speaker Name** (HH:MM:SS):`` at the start of
+    each turn. Returns ``[]`` when the text has no such labels.
+    """
+    matches = list(_TURN_LABEL_RE.finditer(text))
+    if not matches:
+        return []
+    turns: list[tuple[str, str, str]] = []
+    for i, m in enumerate(matches):
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = text[start:end].strip()
+        if body:
+            turns.append((m.group(1).strip(), m.group(2), body))
+    return turns
+
+
+def chunk_speaker_turns(
+    text: str,
+    target_tokens: int = 400,
+    overlap_tokens: int = 80,
+) -> list[SpeakerChunk]:
+    """Chunk a speaker-labelled transcript, carrying speaker + timestamp.
+
+    Turns are concatenated into ~``target_tokens`` windows (with trailing-turn
+    overlap) so cross-turn context is preserved, and each chunk records the
+    speaker/timestamp of the turn it starts at for deep citations.
+    """
+    turns = parse_speaker_turns(text)
+    if not turns:
+        return []
+
+    chunks: list[SpeakerChunk] = []
+    buffer: list[tuple[str, str, str]] = []
+    buffer_tokens = 0
+
+    def flush() -> None:
+        nonlocal buffer, buffer_tokens
+        if not buffer:
+            return
+        body = " ".join(t for _, _, t in buffer)
+        first_speaker, first_ts = buffer[0][0], buffer[0][1]
+        chunks.append(
+            SpeakerChunk(
+                index=len(chunks),
+                text=body,
+                token_count=buffer_tokens,
+                speaker=first_speaker,
+                timestamp=first_ts,
+            )
+        )
+        # Carry overlap: keep trailing turns worth <= overlap_tokens.
+        carry: list[tuple[str, str, str]] = []
+        carry_tokens = 0
+        for spk, ts, turn in reversed(buffer):
+            t = approximate_tokens(turn)
+            if carry_tokens + t > overlap_tokens and carry:
+                break
+            carry.append((spk, ts, turn))
+            carry_tokens += t
+        buffer = list(reversed(carry))
+        buffer_tokens = carry_tokens
+
+    for spk, ts, turn in turns:
+        t = approximate_tokens(turn)
+        # A single over-long turn becomes its own chunk.
+        if t >= target_tokens and not buffer:
+            chunks.append(
+                SpeakerChunk(
+                    index=len(chunks),
+                    text=turn,
+                    token_count=t,
+                    speaker=spk,
+                    timestamp=ts,
+                )
+            )
+            continue
+        if buffer_tokens + t > target_tokens and buffer:
+            flush()
+        buffer.append((spk, ts, turn))
         buffer_tokens += t
 
     flush()

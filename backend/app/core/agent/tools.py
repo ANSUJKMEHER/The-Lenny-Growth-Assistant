@@ -55,11 +55,21 @@ class SearchTranscriptsTool(Tool):
                     "source_id": r.source_id,
                     "title": r.title,
                     "episode_id": r.episode_id,
+                    "speaker": r.speaker,
+                    "timestamp": r.timestamp,
                     "chunk_index": r.chunk_index,
                     "text": r.text,
                 }
             )
-            ctx.add_citation(r.source_id, r.title, r.chunk_index, r.text[:280])
+            ctx.add_citation(
+                r.source_id,
+                r.title,
+                r.chunk_index,
+                r.text[:280],
+                speaker=r.speaker,
+                timestamp=r.timestamp,
+                url=r.url,
+            )
 
         payload = json.dumps({"results": blocks}, ensure_ascii=False, indent=2)
         return ToolResult(content=payload)

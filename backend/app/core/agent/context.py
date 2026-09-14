@@ -24,7 +24,14 @@ class ToolContext:
     artifacts: list[Artifact] = field(default_factory=list)
 
     def add_citation(
-        self, source_id: str, title: str, chunk_index: int, excerpt: str
+        self,
+        source_id: str,
+        title: str,
+        chunk_index: int,
+        excerpt: str,
+        speaker: str | None = None,
+        timestamp: str | None = None,
+        url: str | None = None,
     ) -> None:
         self.citations.append(
             Citation(
@@ -32,5 +39,8 @@ class ToolContext:
                 title=title,
                 chunk_index=chunk_index,
                 excerpt=excerpt,
+                speaker=speaker,
+                timestamp=timestamp,
+                url=url,
             )
         )

@@ -427,6 +427,18 @@ svg.i { width: 18px; height: 18px; display: block; }
   overflow-wrap: break-word;
   word-break: break-word;
 }
+.msg-body.streaming::after {
+  content: "▍";
+  color: var(--accent);
+  animation: blink 1s steps(2) infinite;
+  margin-left: 1px;
+}
+.msg-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0 4px;
+}
 .msg.user .msg-body {
   background: var(--user-bubble);
   color: var(--user-text);
@@ -496,7 +508,18 @@ svg.i { width: 18px; height: 18px; display: block; }
   font-size: inherit;
   text-align: left;
 }
-.citation-title { flex: 1; font-weight: 600; color: var(--text); }
+.citation-head-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.citation-title { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.citation-meta { font-size: 11px; color: var(--text-muted); }
+.citation-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+.citation-link:hover { text-decoration: underline; }
 .citation-chevron {
   color: var(--text-faint);
   transition: transform 0.18s var(--ease);

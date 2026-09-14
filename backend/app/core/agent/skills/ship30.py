@@ -126,7 +126,15 @@ class Ship30EssaySkill(Tool):
             grounded.append(
                 f"[{p.title} — episode {p.episode_id or 'n/a'}, chunk {p.chunk_index}]\n{p.text}"
             )
-            ctx.add_citation(p.source_id, p.title, p.chunk_index, p.text[:280])
+            ctx.add_citation(
+                p.source_id,
+                p.title,
+                p.chunk_index,
+                p.text[:280],
+                speaker=p.speaker,
+                timestamp=p.timestamp,
+                url=p.url,
+            )
 
         # 2. Compose with the encoded principles.
         user_prompt = f"""

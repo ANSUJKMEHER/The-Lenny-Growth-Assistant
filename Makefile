@@ -3,7 +3,7 @@
 PYTHON ?= python3
 VENV := .venv
 
-.PHONY: help setup up down logs test seed ingest run
+.PHONY: help setup up down logs test seed fetch ingest run
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -23,6 +23,9 @@ logs: ## Tail API logs
 
 seed: ## Ingest the bundled sample transcripts (needs a running API)
 	curl -s -X POST http://localhost:8000/api/ingest/seed | jq .
+
+fetch: ## Fetch + ingest the official Lenny's Podcast dataset (needs a running API)
+	curl -s -X POST http://localhost:8000/api/ingest/fetch | jq .
 
 ingest: ## Ingest transcripts from backend/data/transcripts (needs a running API)
 	curl -s -X POST http://localhost:8000/api/ingest | jq .

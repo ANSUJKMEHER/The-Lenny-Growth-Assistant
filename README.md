@@ -37,12 +37,13 @@ one-command startup.
 
 | Capability | Details |
 |---|---|
-| **Grounded chat** | RAG over Lenny's Podcast transcripts. Answers cite the source episode; the assistant admits when the corpus doesn't support an answer instead of hallucinating. |
+| **Grounded chat** | RAG over **real Lenny's Podcast transcripts** (auto-fetched from the official public dataset on first boot). Answers cite the guest + episode + timestamp; the assistant admits when the corpus doesn't support an answer instead of hallucinating. |
+| **Streaming** | Real Server-Sent Events (SSE) token streaming with progress statuses ("Searching transcripts…") and a non-streaming fallback. |
 | **Sessions** | Independent chat sessions with full history persisted in PostgreSQL. |
-| **Ship 30 for 30 skill** | A dedicated, encoded skill that turns grounded material into a ~1,250-word skimmable essay (hook, narrative arc, headings/bullets/bold, concrete takeaway). |
-| **Artifact generation** | Produce Markdown documents or complete HTML/CSS snippets, rendered in a side-by-side **Artifact Viewer** (Claude-Artifacts style). |
+| **Ship 30 for 30 skill** | A dedicated, encoded skill that turns grounded material into a ~1,250-word skimmable essay (hook, narrative arc, headings/bullets/bold, concrete takeaway) with length enforcement. |
+| **Artifact generation** | Produce Markdown documents or complete HTML/CSS snippets, rendered in a side-by-side **Artifact Viewer** with copy / download / open-in-new-tab. |
 | **Flexible LLM config** | Switch between Ollama (local, keyless — the demo default), Anthropic, and OpenAI from the UI or API. No code changes. |
-| **Operability** | Structured logs, health/readiness endpoints, graceful degradation, `.env.example` with safe defaults, Docker Compose. |
+| **Operability** | Structured logs, health/readiness endpoints, graceful degradation, `.env.example` with safe defaults, Docker Compose + `run.sh`. |
 
 ## Architecture at a glance
 
@@ -67,7 +68,20 @@ Full details, DB schema, endpoint contracts, and the agent-routing design are in
 
 ---
 
-## Quick start (Docker Compose)
+## Quick start
+
+**One command (recommended):**
+
+```bash
+./run.sh
+```
+
+`run.sh` starts Ollama (pulling `llama3.1` + `nomic-embed-text` if needed), creates
+`.env` from `.env.example`, and boots the stack with Docker Compose (or a local
+fallback). On first boot the app also auto-fetches the **official Lenny's Podcast
+starter dataset** (50 real episodes) so answers are grounded in real content.
+
+### Quick start (Docker Compose)
 
 Prerequisites: **Docker** + **Docker Compose**, and **Ollama** running on your host
 with a model pulled (the demo requires local Ollama).
@@ -86,9 +100,10 @@ docker compose up --build -d
 open http://localhost:8000
 ```
 
-The API seeds three clearly-marked `[SAMPLE]` transcripts on first start so the
-demo works end-to-end immediately. Replace them with real Lenny transcripts via
-the ingestion endpoints (see below).
+The API **auto-fetches 50 real Lenny's Podcast transcripts** on first start (see
+[Ingesting transcripts](#ingesting-transcripts)), so the demo works end-to-end
+immediately with genuine grounding. If the network is unavailable, it falls back to
+the bundled clearly-marked `[SAMPLE]` transcripts.
 
 > **macOS / Windows note:** Docker can't reach `localhost` for Ollama directly.
 > Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in `.env` (the Compose
@@ -183,12 +198,18 @@ See [docs/architecture.md §5](docs/architecture.md) for the full trade-off.
 
 ## Ingesting transcripts
 
-Transcripts live in `backend/data/transcripts/` as `.md`/`.txt` files with optional
-frontmatter (`title`, `episode_id`, `speaker`, `url`). Ingestion is **idempotent**
-(deduplicated by content hash), chunked, embedded, and stored with source metadata.
+The knowledge base is **auto-populated on first boot** with the official Lenny's
+Podcast starter dataset (50 real episodes; source:
+[`LennysNewsletter/lennys-newsletterpodcastdata`](https://github.com/LennysNewsletter/lennys-newsletterpodcastdata),
+used under its personal/non-commercial license). Transcripts are fetched at
+runtime rather than committed, chunked (with speaker + timestamp preserved), and
+indexed with source metadata.
 
 ```bash
-# Ingest bundled samples (automatic on first start, or manually):
+# Fetch + ingest the official starter pack on demand:
+curl -X POST http://localhost:8000/api/ingest/fetch
+
+# Ingest bundled samples (offline fallback):
 curl -X POST http://localhost:8000/api/ingest/seed
 
 # Ingest every file in backend/data/transcripts:
@@ -202,12 +223,8 @@ curl -X POST http://localhost:8000/api/ingest/url \
 curl http://localhost:8000/api/sources
 ```
 
-Answers are always **traced back to their source** — citations (episode title +
-chunk) are returned with the assistant message and shown in the UI.
-
-> The bundled files are clearly-marked `[SAMPLE]` transcripts for the demo. Point
-> the ingestion at the real public Lenny transcript source (or drop real files in
-> the data dir) before treating answers as authoritative.
+Answers are **traced back to their source** — citations include the episode
+title, guest, timestamp, a source link, and the retrieved excerpt.
 
 ---
 
@@ -275,7 +292,9 @@ Interactive docs are served at `/docs` (Swagger) and `/redoc`.
 | `GET /api/sessions/{id}` | Session detail (messages + artifacts) |
 | `DELETE /api/sessions/{id}` | Delete a session |
 | `POST /api/sessions/{id}/messages` | Send a message → run the agent |
+| `POST /api/sessions/{id}/messages/stream` | Same, but **SSE streaming** (`token`/`status`/`done`/`error` events) |
 | `GET /api/config`, `PUT /api/config` | Read / switch model provider |
+| `POST /api/ingest/fetch` | Fetch + ingest the official Lenny's Podcast dataset |
 | `POST /api/ingest/seed` | Ingest bundled samples |
 | `POST /api/ingest` | Ingest `data/transcripts/*` |
 | `POST /api/ingest/url` | Ingest a transcript URL |

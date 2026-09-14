@@ -36,6 +36,9 @@ class Citation(BaseModel):
     title: str
     chunk_index: int
     excerpt: str
+    speaker: str | None = None
+    timestamp: str | None = None
+    url: str | None = None
 
 
 class MessageOut(BaseModel):

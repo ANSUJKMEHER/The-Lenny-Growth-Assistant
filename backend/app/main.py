@@ -47,21 +47,24 @@ async def lifespan(app: FastAPI):
         settings.ollama_model,
     )
 
-    # Best-effort sample ingestion so a fresh clone has something to query.
+    # Best-effort corpus bootstrap: fetch the official Lenny's Podcast
+    # transcripts on a fresh database (falling back to bundled samples when
+    # offline) so a fresh clone has real grounding data to query.
     try:
-        from app.core.rag import ingest
+        from app.core.rag import fetch
 
         async with get_session_factory()() as db:
-            stats = await ingest.seed_samples(db)
+            stats = await fetch.ensure_corpus(db)
             await db.commit()
             logger.info(
-                "startup seed sources_created=%d chunks_created=%d skipped=%d",
+                "startup corpus sources_created=%d chunks_created=%d skipped=%d errors=%d",
                 stats.sources_created,
                 stats.chunks_created,
                 stats.sources_skipped,
+                len(stats.errors),
             )
-    except Exception:  # pragma: no cover - seed is non-fatal
-        logger.exception("startup seed failed (continuing)")
+    except Exception:  # pragma: no cover - bootstrap is non-fatal
+        logger.exception("startup corpus bootstrap failed (continuing)")
 
     yield
     logger.info("shutdown")

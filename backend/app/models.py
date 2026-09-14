@@ -122,6 +122,11 @@ class Chunk(Base):
     )
     index: Mapped[int] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)
+    # Speaker + timestamp of the transcript turn where this chunk starts, when
+    # the source is a speaker-labelled podcast transcript (e.g.
+    # "**Lenny Rachitsky** (00:12:34):"). Enables deep, per-chunk citations.
+    speaker: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    timestamp: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Embedding stored as a JSON list of floats. PostgreSQL JSONB and SQLite
     # JSON both round-trip it cleanly; similarity is computed in Python (the
     # corpus is small enough that this is fast and keeps Docker deps minimal).

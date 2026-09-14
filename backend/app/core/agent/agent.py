@@ -59,6 +59,19 @@ class AgentResult:
     tool_trace: list[str] = field(default_factory=list)
 
 
+@dataclass
+class AgentEvent:
+    """A streaming increment emitted by the agent loop.
+
+    ``kind`` is one of ``token`` (answer text), ``tool`` (a tool was invoked),
+    or ``done`` (terminal, carries the final :class:`AgentResult`).
+    """
+
+    kind: str
+    data: str = ""
+    result: AgentResult | None = None
+
+
 def build_default_tools() -> list[Tool]:
     return [
         SearchTranscriptsTool(),
@@ -92,23 +105,50 @@ class Agent:
         ctx: ToolContext,
         history: list[ChatMessage],
     ) -> AgentResult:
+        """Run the agent loop and return the final result (non-streaming)."""
+        result: AgentResult | None = None
+        async for ev in self.run_stream(ctx, history):
+            if ev.kind == "done" and ev.result is not None:
+                result = ev.result
+        return result or AgentResult(content="(empty response)")
+
+    async def run_stream(
+        self,
+        ctx: ToolContext,
+        history: list[ChatMessage],
+    ):
+        """Run the agent loop, yielding :class:`AgentEvent` increments.
+
+        Identical tool-calling logic to :meth:`run`, except the final answer is
+        streamed token-by-token (where the provider supports it) and tool
+        invocations are surfaced as ``tool`` events for client progress.
+        """
         messages = [ChatMessage(role="system", content=SYSTEM_PROMPT), *history]
         tool_specs = [t.spec() for t in self.tools]
         trace: list[str] = []
 
         for _ in range(MAX_ITERATIONS):
-            response = await self.provider.complete(messages, tools=tool_specs)
+            text_parts: list[str] = []
+            tool_calls: list[ToolCall] = []
 
-            if response.tool_calls:
-                trace.extend(tc.name for tc in response.tool_calls)
+            async for chunk in self.provider.stream(messages, tools=tool_specs):
+                if chunk.tool_calls:
+                    tool_calls.extend(chunk.tool_calls)
+                if chunk.text:
+                    text_parts.append(chunk.text)
+                    # Only stream text when this turn is an answer, not a tool
+                    # call. (Ollama never mixes the two; the single-shot fallback
+                    # can, in which case we buffer instead of emitting.)
+                    if not chunk.tool_calls and not tool_calls:
+                        yield AgentEvent(kind="token", data=chunk.text)
+
+            if tool_calls:
+                trace.extend(tc.name for tc in tool_calls)
                 messages.append(
-                    ChatMessage(
-                        role="assistant",
-                        content=response.content,
-                        tool_calls=response.tool_calls,
-                    )
+                    ChatMessage(role="assistant", content="", tool_calls=tool_calls)
                 )
-                for call in response.tool_calls:
+                for call in tool_calls:
+                    yield AgentEvent(kind="tool", data=call.name)
                     result = await self._execute(ctx, call)
                     messages.append(
                         ChatMessage(
@@ -120,17 +160,25 @@ class Agent:
                     )
                 continue
 
-            return AgentResult(
-                content=response.content or "(empty response)",
+            content = "".join(text_parts)
+            yield AgentEvent(
+                kind="done",
+                result=AgentResult(
+                    content=content or "(empty response)",
+                    grounded=bool(trace and "search_transcripts" in trace),
+                    tool_trace=trace,
+                ),
+            )
+            return
+
+        yield AgentEvent(
+            kind="done",
+            result=AgentResult(
+                content=(
+                    "I reached the maximum number of tool steps while answering this. "
+                    "Please ask again with a narrower question."
+                ),
                 grounded=bool(trace and "search_transcripts" in trace),
                 tool_trace=trace,
-            )
-
-        return AgentResult(
-            content=(
-                "I reached the maximum number of tool steps while answering this. "
-                "Please ask again with a narrower question."
             ),
-            grounded=bool(trace and "search_transcripts" in trace),
-            tool_trace=trace,
         )

@@ -82,3 +82,17 @@ async def test_config_endpoint(client):
     body = res.json()
     assert body["provider"] == "ollama"
     assert any(p["name"] == "ollama" for p in body["providers"])
+
+
+async def test_stream_endpoint_validates(client):
+    res = await client.post("/api/sessions", json={"title": "s"})
+    conv_id = res.json()["id"]
+    res = await client.post(f"/api/sessions/{conv_id}/messages/stream", json={"content": ""})
+    assert res.status_code == 422
+
+
+async def test_stream_endpoint_no_provider_503(client):
+    res = await client.post("/api/sessions", json={"title": "s"})
+    conv_id = res.json()["id"]
+    res = await client.post(f"/api/sessions/{conv_id}/messages/stream", json={"content": "hello"})
+    assert res.status_code == 503

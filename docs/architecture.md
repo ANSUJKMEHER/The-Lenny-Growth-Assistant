@@ -68,8 +68,10 @@ GET  /api/sessions                               → {sessions: [Summary]}
 GET  /api/sessions/{id}                          → ConversationOut (messages + artifacts)
 DEL  /api/sessions/{id}                          → 204
 POST /api/sessions/{id}/messages {content}       → ChatResponse
+POST /api/sessions/{id}/messages/stream          → SSE (token/status/done/error)
 GET  /api/config                                 → ConfigOut
 PUT  /api/config {provider, model?}              → ConfigOut
+POST /api/ingest/fetch                           → IngestResult (official dataset)
 POST /api/ingest/seed | /api/ingest | /api/ingest/url → IngestResult
 GET  /api/sources                                → [SourceOut]
 GET  /api/artifacts/{id}                         → ArtifactOut
@@ -94,13 +96,21 @@ for the "≥80% grounded" success metric.
 ## 4. Ingestion & retrieval flow
 
 ```
-transcript file/URL
-   → parse frontmatter (title, episode_id, speaker, url)
+transcript (official fetch / local file / URL)
+   → parse frontmatter (title, guest, date, url)
    → sha256(content) → dedupe by content_hash (idempotent)
-   → chunk_text()  (~400 tokens, 80 overlap, sentence sliding window)
+   → chunk_speaker_turns()  (~400 tokens, 80 overlap, speaker + timestamp per chunk)
+      or chunk_text() for plain text
    → embed each chunk  (Ollama nomic-embed-text, else lexical hashing fallback)
    → persist source + chunks
 ```
+
+**Official dataset:** on first boot (or `POST /api/ingest/fetch`) the app fetches
+50 real Lenny's Podcast transcripts from the public
+[`LennysNewsletter/lennys-newsletterpodcastdata`](https://github.com/LennysNewsletter/lennys-newsletterpodcastdata)
+starter pack (personal/non-commercial license) and ingests them. Raw files are
+fetched at runtime, never committed. If the network is unavailable the app falls
+back to the bundled sample transcripts.
 
 **Retrieval** (`Retriever.retrieve`):
 1. Load all chunks + source metadata.
@@ -109,7 +119,13 @@ transcript file/URL
 4. Empty result → return `[]`; the search tool then tells the agent to acknowledge.
 
 **Traceability:** every retrieved chunk carries `source_id`, `title`, `episode_id`,
-and `chunk_index`; these become the message's `citations`.
+`speaker`, `timestamp`, and `url`; these become the message's `citations` (guest +
+episode + timestamp + source link shown in the UI).
+
+**Streaming:** `POST …/messages/stream` emits Server-Sent Events (`status` →
+`token`* → `done`, or `error`) so the client renders progress + token-by-token
+answers. The Ollama provider streams natively; other providers use a single-shot
+fallback chunk.
 
 **Refresh:** re-running ingestion is safe (hash-deduplicated); new files add, edited
 files create new sources (the old hash differs). A full "delete-and-reload" of a

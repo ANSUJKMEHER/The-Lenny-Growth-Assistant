@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.rag.chunker import chunk_text
+from app.core.rag.chunker import chunk_speaker_turns, chunk_text
 from app.core.rag.embedder import EmbeddingService
 from app.models import Chunk, TranscriptSource
 
@@ -47,8 +47,24 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     for line in m.group(1).splitlines():
         if ":" in line:
             k, v = line.split(":", 1)
-            meta[k.strip().lower()] = v.strip()
+            meta[k.strip().lower()] = v.strip().strip('\"\'')
     return meta, text[m.end():]
+
+
+def parse_date(value: str | None) -> datetime | None:
+    """Parse a frontmatter date (``YYYY-MM-DD`` or ISO-8601) into a datetime."""
+    if not value:
+        return None
+    value = value.strip().strip('\"\'')
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            return datetime.strptime(value[:10], "%Y-%m-%d")
+        except ValueError:
+            return None
 
 
 def _extract_text_from_html(html: str) -> str:
@@ -68,6 +84,7 @@ async def ingest_document(
     episode_id: str | None = None,
     url: str | None = None,
     speaker: str | None = None,
+    published_at: datetime | None = None,
     embedder: EmbeddingService | None = None,
 ) -> tuple[IngestStats, TranscriptSource | None]:
     """Ingest a single transcript document (idempotent by content hash)."""
@@ -95,16 +112,29 @@ async def ingest_document(
         title=title[:512],
         speaker=speaker,
         url=url,
+        published_at=published_at,
         content_hash=digest,
     )
     db.add(source)
     await db.flush()  # get source.id
 
-    chunks = chunk_text(
+    # Prefer speaker-turn chunking when the transcript is speaker-labelled
+    # (e.g. the official Lenny podcast format), which records speaker +
+    # timestamp per chunk for deep citations.
+    speaker_chunks = chunk_speaker_turns(
         text,
         target_tokens=settings.chunk_target_tokens,
         overlap_tokens=settings.chunk_overlap_tokens,
     )
+    if speaker_chunks:
+        chunks = speaker_chunks
+    else:
+        chunks = chunk_text(
+            text,
+            target_tokens=settings.chunk_target_tokens,
+            overlap_tokens=settings.chunk_overlap_tokens,
+        )
+
     try:
         vectors = await embedder.embed_many([c.text for c in chunks])
     except Exception as exc:  # pragma: no cover - defensive
@@ -119,6 +149,8 @@ async def ingest_document(
                 text=chunk.text,
                 embedding=vec,
                 token_count=chunk.token_count,
+                speaker=getattr(chunk, "speaker", None),
+                timestamp=getattr(chunk, "timestamp", None),
             )
         )
 
@@ -150,7 +182,8 @@ async def ingest_directory(db: AsyncSession, directory: Path) -> IngestStats:
                 title=meta.get("title") or path.stem.replace("-", " ").title(),
                 episode_id=meta.get("episode_id"),
                 url=meta.get("url"),
-                speaker=meta.get("speaker"),
+                speaker=meta.get("speaker") or meta.get("guest"),
+                published_at=parse_date(meta.get("date")),
                 embedder=embedder,
             )
             stats.sources_created += doc_stats.sources_created
