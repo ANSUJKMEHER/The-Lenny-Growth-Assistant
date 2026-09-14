@@ -1,9 +1,9 @@
 /* The Lenny Growth Assistant — frontend.
  *
  * Vanilla JS (no build step) talking to the FastAPI backend. Handles sessions,
- * streaming-free chat, grounded citations, the provider switcher, and the
- * side-by-side artifact viewer (markdown rendered client-side; HTML rendered in
- * a sandboxed iframe for isolation).
+ * streaming-free chat, grounded citations (expandable), the provider switcher,
+ * the side-by-side artifact viewer, light/dark theme, copy actions, and session
+ * management.
  */
 (() => {
   "use strict";
@@ -30,6 +30,15 @@
     if (cls) n.className = cls;
     if (text !== undefined) n.textContent = text;
     return n;
+  };
+  const icon = (id) => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "i");
+    svg.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", `#${id}`);
+    svg.appendChild(use);
+    return svg;
   };
 
   const messagesEl = $("#messages");
@@ -61,6 +70,49 @@
     return sanitize(marked.parse(md || ""));
   }
 
+  async function copyText(text, label) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(label || "Copied to clipboard");
+      return true;
+    } catch (err) {
+      showToast("Could not copy — clipboard unavailable");
+      return false;
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Theme
+  // ------------------------------------------------------------------ //
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem("lenny-theme", theme);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") || "light";
+  }
+
+  function initTheme() {
+    let saved = null;
+    try {
+      saved = localStorage.getItem("lenny-theme");
+    } catch (_) {
+      /* ignore */
+    }
+    if (saved === "dark" || saved === "light") {
+      applyTheme(saved);
+    } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      applyTheme("dark");
+    } else {
+      applyTheme("light");
+    }
+  }
+
   // ------------------------------------------------------------------ //
   // API
   // ------------------------------------------------------------------ //
@@ -88,37 +140,113 @@
       btn.type = "button";
       if (s.id === state.currentSessionId) btn.classList.add("active");
       btn.addEventListener("click", () => selectSession(s.id));
+
+      const del = el("button", "session-delete");
+      del.type = "button";
+      del.setAttribute("aria-label", `Delete session ${s.title || "New chat"}`);
+      del.title = "Delete session";
+      del.appendChild(icon("icon-trash"));
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteSession(s.id);
+      });
+
+      btn.appendChild(del);
       sessionListEl.appendChild(btn);
     }
   }
 
   function appendMessage(role, content, citations) {
     const wrap = el("div", `msg ${role}`);
+
+    // Avatar
+    const avatar = el("div", "msg-avatar");
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.appendChild(icon(role === "user" ? "icon-user" : "icon-logo"));
+    wrap.appendChild(avatar);
+
+    const contentWrap = el("div", "msg-content");
+
     const body = el("div", "msg-body prose");
     body.innerHTML = renderMarkdown(content);
-    wrap.appendChild(body);
-    if (citations && citations.length) {
-      const citeBox = el("div", "citations");
-      for (const c of citations) {
-        const cite = el("div", "citation");
-        const strong = el("strong", null, c.title);
-        cite.appendChild(strong);
-        cite.appendChild(document.createTextNode(` · ${(c.excerpt || "").slice(0, 120)}`));
-        citeBox.appendChild(cite);
-      }
-      wrap.appendChild(citeBox);
+    contentWrap.appendChild(body);
+
+    if (role === "assistant") {
+      contentWrap.appendChild(buildActions(content));
     }
+
+    if (citations && citations.length) {
+      contentWrap.appendChild(buildCitations(citations));
+    }
+
+    wrap.appendChild(contentWrap);
     messagesEl.appendChild(wrap);
     scrollToBottom();
+    return wrap;
+  }
+
+  function buildActions(content) {
+    const actions = el("div", "msg-actions");
+    const copy = el("button", "msg-action");
+    copy.type = "button";
+    copy.setAttribute("aria-label", "Copy response");
+    copy.title = "Copy response";
+    copy.appendChild(icon("icon-copy"));
+    copy.addEventListener("click", async () => {
+      const ok = await copyText(content, "Response copied");
+      if (ok) {
+        copy.classList.add("done");
+        copy.replaceChildren(icon("icon-check"));
+        setTimeout(() => {
+          copy.classList.remove("done");
+          copy.replaceChildren(icon("icon-copy"));
+        }, 1600);
+      }
+    });
+    actions.appendChild(copy);
+    return actions;
+  }
+
+  function buildCitations(citations) {
+    const box = el("div", "citations");
+    box.appendChild(el("div", "citations-label", "Sources"));
+    for (const c of citations) {
+      const cite = el("div", "citation");
+      const head = el("button", "citation-head");
+      head.type = "button";
+      head.setAttribute("aria-expanded", "false");
+      head.appendChild(el("span", "citation-title", c.title));
+      const chevron = el("span", "citation-chevron");
+      chevron.appendChild(icon("icon-chevron"));
+      head.appendChild(chevron);
+
+      const excerpt = el("div", "citation-excerpt", c.excerpt || "");
+      head.addEventListener("click", () => {
+        const open = cite.classList.toggle("open");
+        head.setAttribute("aria-expanded", String(open));
+      });
+      cite.appendChild(head);
+      cite.appendChild(excerpt);
+      box.appendChild(cite);
+    }
+    return box;
   }
 
   function appendTyping() {
     const wrap = el("div", "msg assistant");
+    const avatar = el("div", "msg-avatar");
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.appendChild(icon("icon-logo"));
+    wrap.appendChild(avatar);
+
+    const contentWrap = el("div", "msg-content");
     const body = el("div", "msg-body");
     const typing = el("span", "typing");
     typing.innerHTML = "<span></span><span></span><span></span>";
     body.appendChild(typing);
-    wrap.appendChild(body);
+    contentWrap.appendChild(body);
+    wrap.appendChild(contentWrap);
+
     messagesEl.appendChild(wrap);
     scrollToBottom();
     return wrap;
@@ -136,10 +264,13 @@
     if (!state.config) return;
     const c = state.config;
     $("#providerLabel").textContent = `${c.provider} · ${c.model || "—"}`;
-    $("#modelBadge").textContent = `${c.provider} / ${c.model || "—"}`;
+    $("#modelBadgeText").textContent = `${c.provider} / ${c.model || "—"}`;
     const active = c.providers.find((p) => p.name === c.provider);
+    const available = active && active.available;
     const dot = $("#providerDot");
-    dot.className = "status-dot " + (active && active.available ? "ok" : "warn");
+    dot.className = "status-dot " + (available ? "ok" : "warn");
+    const badgeDot = $(".model-badge-dot");
+    if (badgeDot) badgeDot.classList.toggle("warn", !available);
   }
 
   // ------------------------------------------------------------------ //
@@ -178,6 +309,7 @@
   function renderActiveArtifact() {
     const a = state.artifacts.find((x) => x.id === state.activeArtifactId);
     if (!a) return;
+    $("#artifactTitle").textContent = a.title;
     artifactBody.innerHTML = "";
 
     if (a.kind === "html") {
@@ -220,7 +352,6 @@
     }
     emptyStateEl.style.display = "none";
     setArtifacts(data.artifacts);
-    // If nothing to show, restore empty state.
     if (!(data.messages || []).length) {
       messagesEl.appendChild(emptyStateEl);
       emptyStateEl.style.display = "";
@@ -239,6 +370,20 @@
     messagesEl.appendChild(emptyStateEl);
     emptyStateEl.style.display = "";
     inputEl.focus();
+  }
+
+  async function deleteSession(id) {
+    try {
+      await api(`/api/sessions/${id}`, { method: "DELETE" });
+      showToast("Session deleted");
+      if (state.currentSessionId === id) {
+        state.currentSessionId = null;
+        await newChat();
+      }
+      await loadSessions();
+    } catch (err) {
+      showToast(`Could not delete: ${err.message}`);
+    }
   }
 
   // ------------------------------------------------------------------ //
@@ -276,7 +421,6 @@
         : state.currentTitle;
       updateHeader();
       if (res.artifacts && res.artifacts.length) {
-        // Append to session artifacts and show the newest.
         setArtifacts([...state.artifacts, ...res.artifacts]);
         state.activeArtifactId = res.artifacts[res.artifacts.length - 1].id;
         renderArtifactTabs();
@@ -323,7 +467,7 @@
       opt.appendChild(left);
       opt.appendChild(stateBadge);
       if (p.available && p.name !== active) {
-        opt.style.cursor = "pointer";
+        opt.classList.add("clickable");
         opt.addEventListener("click", () => switchProvider(p.name));
       }
       box.appendChild(opt);
@@ -369,6 +513,14 @@
 
   $("#newChatBtn").addEventListener("click", newChat);
   $("#closeArtifact").addEventListener("click", () => (artifactPanel.hidden = true));
+  $("#copyArtifact").addEventListener("click", () => {
+    const a = state.artifacts.find((x) => x.id === state.activeArtifactId);
+    if (a) copyText(a.content, "Artifact copied");
+  });
+
+  $("#themeToggle").addEventListener("click", () => {
+    applyTheme(currentTheme() === "dark" ? "light" : "dark");
+  });
 
   $("#providerBtn").addEventListener("click", () => {
     loadConfig();
@@ -389,9 +541,10 @@
   // Suggestion chips.
   document.querySelectorAll(".suggestion").forEach((btn) => {
     btn.addEventListener("click", () => {
-      inputEl.value = btn.dataset.prompt;
+      const prompt = btn.dataset.prompt;
+      inputEl.value = prompt;
       autoGrow();
-      sendMessage(btn.dataset.prompt);
+      sendMessage(prompt);
     });
   });
 
@@ -404,6 +557,7 @@
   // Init
   // ------------------------------------------------------------------ //
   (async function init() {
+    initTheme();
     await Promise.all([loadConfig(), loadSessions()]);
     if (state.sessions.length) {
       await selectSession(state.sessions[0].id);

@@ -12,6 +12,7 @@ Source of principles: Ship 30 for 30 "Types of Share" / atomic-essay guide.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from app.config import get_settings
@@ -20,6 +21,8 @@ from app.core.agent.tool import Tool, ToolResult
 from app.core.llm.base import ChatMessage
 from app.core.security import render_markdown_safe
 from app.models import Artifact
+
+logger = logging.getLogger("app.agent.ship30")
 
 # The encoded writing principles — these are the durable rules the skill applies
 # on every invocation, keeping the style consistent and on-brand.
@@ -56,6 +59,16 @@ LENGTH & VOICE
 - Target approximately 1,250 words. Write in a direct, confident, first or
   second person voice. No corporate filler, no jargon.
 """
+
+# Length guardrails: local models under-generate badly, so we enforce a floor
+# and expand in a bounded loop when the draft comes back too short.
+MIN_ESSAY_WORDS = 1000
+TARGET_ESSAY_WORDS = 1250
+MAX_EXPANSION_ROUNDS = 2
+
+
+def _word_count(text: str) -> int:
+    return len(text.split())
 
 
 class Ship30EssaySkill(Tool):
@@ -141,7 +154,42 @@ Return the essay as clean Markdown (headings, bullets, **bold**, numbered points
         if not essay:
             return ToolResult(content="Failed to generate the essay; please retry.")
 
-        # 3. Persist as a Markdown artifact for the viewer.
+        # 3. Enforce the ~1,250-word length. Local models routinely stop at a
+        # few hundred words; expand the draft in a bounded loop (never infinite,
+        # never hard-failing the skill if the provider can't cooperate).
+        for _ in range(MAX_EXPANSION_ROUNDS):
+            if _word_count(essay) >= MIN_ESSAY_WORDS:
+                break
+            try:
+                expansion = await ctx.provider.complete(
+                    [
+                        ChatMessage(role="system", content=SHIP30_PRINCIPLES),
+                        ChatMessage(
+                            role="user",
+                            content=(
+                                f"Your essay is currently {_word_count(essay)} words, "
+                                f"but the brief requires approximately {TARGET_ESSAY_WORDS}. "
+                                "Expand it: add more specific, grounded detail to each "
+                                "numbered point, more concrete examples drawn from the "
+                                "source material, and a richer takeaway. Keep the same "
+                                "structure, hook, and skimmable formatting. Return the FULL "
+                                "expanded essay as clean Markdown.\n\nCurrent essay:\n\n"
+                                + essay
+                            ),
+                        ),
+                    ],
+                    tools=None,
+                )
+            except Exception:  # pragma: no cover - never fail the skill on expansion
+                logger.warning("Ship 30 expansion failed; keeping the shorter draft")
+                break
+            expanded = (expansion.content or "").strip()
+            if expanded and _word_count(expanded) > _word_count(essay):
+                essay = expanded
+            else:
+                break
+
+        # 4. Persist as a Markdown artifact for the viewer.
         title = f"Ship 30: {topic[:60]}"
         artifact = Artifact(
             conversation_id=ctx.conversation_id,

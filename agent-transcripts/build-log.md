@@ -92,10 +92,33 @@ module-level `get_settings` + availability probes directly (see `test_claude_sdk
 **Result:** 29 tests pass; the Claude Agent SDK is genuinely usable on the Anthropic
 path while the demo still runs keyless on Ollama.
 
+## Iteration 9 — UI/UX overhaul + Ship 30 length enforcement
+
+**What:** two reviewer-style gaps remained. (1) The frontend was functional but
+visually flat. (2) The Ship 30 skill asked for ~1,250 words but had no length
+guardrail, and local models under-generate badly (often stopping at a few hundred
+words).
+
+**Correction (UI):** rebuilt `index.html`/`styles.css`/`app.js` with a full design
+system — CSS-variable light **and** dark themes (persisted, OS-preference default),
+gradient brand, avatar-anchored message bubbles, a hero empty state with icon
+suggestion cards, **expandable citations** (title always visible, excerpt revealed
+on click), session delete, and copy actions on responses/artifacts. Kept the
+vanilla-JS/no-build constraint and all accessibility affordances.
+
+**Correction (Ship 30):** added a bounded word-count enforcement loop — if a draft
+is under the floor (~1,000 words), the skill issues a single structured
+"expand to ~1,250 words" continuation, capped at two rounds and never hard-failing
+the skill if the provider can't cooperate. Covered by `test_ship30_skill_does_not_expand_long_essay`.
+
+**Result:** 30 tests pass; UI verified in both themes (no console errors; graceful
+`503` renders as a styled error bubble).
+
 ## Verification
 
-- `pytest -q` → **29 passed** (retrieval, chunking, security, ingestion, agent,
-  skills, API validation + graceful LLM failure, and agent-runtime selection).
+- `pytest -q` → **30 passed** (retrieval, chunking, security, ingestion, agent,
+  skills + length enforcement, API validation + graceful LLM failure, and
+  agent-runtime selection).
 - Smoke test: server boots, `/health` and `/health/ready` return correct status,
   frontend + static assets serve, all 11 API routes registered in OpenAPI.
 

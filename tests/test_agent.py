@@ -68,8 +68,12 @@ async def test_ship30_skill_creates_artifact(db):
     await ingest.ingest_document(db, SAMPLE, title="Fit 101", episode_id="101")
     await db.commit()
 
-    essay_md = "# The Value Hypothesis\n\nHook. Body with **bold** and bullets.\n\n- point one\n- point two\n\nThe takeaway."
-    provider = FakeProvider([LLMResponse(content=essay_md)])
+    short_essay = "# The Value Hypothesis\n\nHook. Body with **bold** and bullets.\n\n- point one\n- point two\n\nThe takeaway."
+    # A draft under the word floor should trigger a single expansion pass.
+    expanded_essay = "# The Value Hypothesis\n\n" + " ".join(["detail"] * 1100)
+    provider = FakeProvider(
+        [LLMResponse(content=short_essay), LLMResponse(content=expanded_essay)]
+    )
     ctx = ToolContext(
         db=db, conversation_id="conv1", provider=provider, retriever=Retriever()
     )
@@ -83,7 +87,28 @@ async def test_ship30_skill_creates_artifact(db):
     artifacts = (await db.execute(select(Artifact))).scalars().all()
     assert len(artifacts) == 1
     assert artifacts[0].kind == "markdown"
-    assert "Value Hypothesis" in artifacts[0].content
+    # The expanded (word-count-satisfying) draft is what gets persisted.
+    assert artifacts[0].content == expanded_essay
+    assert len(artifacts[0].content.split()) >= 1000
+
+
+async def test_ship30_skill_does_not_expand_long_essay(db):
+    await ingest.ingest_document(db, SAMPLE, title="Fit 101", episode_id="101")
+    await db.commit()
+
+    long_essay = "# Long\n\n" + " ".join(["word"] * 1200)
+    provider = FakeProvider([LLMResponse(content=long_essay)])
+    ctx = ToolContext(
+        db=db, conversation_id="conv1", provider=provider, retriever=Retriever()
+    )
+    result = await Ship30EssaySkill().run(ctx, topic="product-market fit")
+    await db.commit()
+
+    artifacts = (await db.execute(select(Artifact))).scalars().all()
+    assert len(artifacts) == 1
+    assert artifacts[0].content == long_essay
+    # No expansion pass was attempted (a single provider call).
+    assert len(provider.calls) == 1
 
 
 def test_default_tools_include_all_capabilities():

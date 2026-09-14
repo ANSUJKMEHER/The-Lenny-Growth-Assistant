@@ -8,8 +8,10 @@ accessibility, and the design decisions behind the frontend.
 ## 1. Principles
 
 1. **Calm and focused.** One conversation, one artifact, muted neutrals. The
-   interface should never compete with the answer. A single indigo accent marks the
-   interactive / "AI" affordances.
+   interface should never compete with the answer. A single indigo→violet gradient
+   marks the interactive / "AI" affordances.
+1. **Both light and dark.** A one-click theme toggle (persisted, defaults to the OS
+   preference) so the tool is comfortable in any environment.
 2. **Trust is the product.** Every grounded answer shows its citations inline.
    The active model/provider is always visible (sidebar + header badge) so users
    know *what* they're talking to — a key requirement.
@@ -40,13 +42,15 @@ Sidebar (264px)              Main chat                    Artifact panel (46vw, 
 
 | State | Treatment |
 |---|---|
-| Empty | Centered mark + headline + 3 suggested prompts (click → runs immediately). |
+| Empty | Gradient hero mark + headline + 3 suggested prompt *cards* (icon + title + description; click → runs immediately). |
+| Theme | Light/dark toggle in the sidebar footer; preference persisted, defaults to OS setting. |
 | Sending | Composer disabled; animated typing indicator in the assistant bubble. |
-| Grounded answer | Assistant bubble + inline citation chips (source title + excerpt). |
+| Grounded answer | Assistant bubble + inline, **expandable** citation cards (source title + chevron → reveals the retrieved excerpt). |
 | Ungrounded / refusal | Assistant clearly states the KB doesn't cover it (no fake citations). |
 | Artifact ready | Panel slides in beside chat; latest artifact auto-selected; tabs for multiples. |
 | Model switch | Dialog lists providers with live `available`/`unavailable` state; active one highlighted. |
 | Error | Inline "something went wrong" message with the reason; a toast for transient UI errors. |
+| Session hover | Each session row reveals a delete action; the active session is highlighted. |
 | Loading sessions | Session list populates; latest session auto-opens. |
 
 ## 4. Responsive behavior
@@ -71,8 +75,15 @@ Sidebar (264px)              Main chat                    Artifact panel (46vw, 
 - **Vanilla JS, no build step.** A `dist/` pipeline adds setup friction for the
   evaluator and buys nothing for a single-page app. `marked` + `DOMPurify` are
   bundled locally (no CDN dependency at runtime).
-- **Light theme.** Transcripts are dense text; light surfaces maximize readability
-  and keep the "internal tool" feel. Indigo accent = clear brand signal.
+- **Light + dark themes.** Dense text reads best on light surfaces; dark mode is
+  offered for low-light environments. Both are driven by the same CSS variable
+  system, so contrast stays consistent. Indigo→violet gradient = clear brand signal.
+- **Expandable citations.** The source title is always visible; the retrieved
+  excerpt is revealed on click. This proves grounding on demand without cluttering
+  the answer.
+- **Inline actions.** Copy (responses + artifacts) and delete (sessions) are
+  available where the user expects them — revealed on hover to keep the default
+  view calm.
 - **HTML artifacts in a sandboxed iframe, not `innerHTML`.** Guarantees isolation
   from the app origin regardless of sanitization; markdown artifacts (already
   sanitized) render as DOM for crisp typography.

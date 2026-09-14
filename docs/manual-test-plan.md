@@ -21,6 +21,9 @@ Automated tests cover API, retrieval, ingestion, security, and agent routing
 | 11 | Click "New chat" then an old session in the sidebar | Each session shows **only its own** messages + artifacts (independent context). | ☐ |
 | 12 | Resize window below 900px | Sidebar collapses to a ☰ drawer; artifact panel becomes full-screen overlay; layout remains usable. | ☐ |
 | 13 | Keyboard: Tab through the UI; Enter sends; Shift+Enter newline | All controls reachable and focus-visible; send works as expected. | ☐ |
+| 13b | Sidebar → theme toggle | UI switches between light and dark; choice persists across reload. | ☐ |
+| 13c | Click a citation card (after a grounded answer) | The source excerpt expands/collapses. | ☐ |
+| 13d | Hover an assistant bubble → copy button; hover a session → delete | Copy puts the raw text on the clipboard; delete removes the session. | ☐ |
 | 14 | Stop Ollama (`systemctl stop ollama` or quit the app), then send a message | Graceful error or fallback (if cloud keys set) — **no crash**; readiness endpoint shows degraded LLM. | ☐ |
 | 15 | `docker compose down` then `up` | Sessions, messages, and artifacts persist (PostgreSQL volume). | ☐ |
 
