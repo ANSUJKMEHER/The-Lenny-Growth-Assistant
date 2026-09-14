@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 # Copy application code.
+COPY pyproject.toml ./
 COPY backend/ ./backend/
 COPY tests/ ./tests/
 
