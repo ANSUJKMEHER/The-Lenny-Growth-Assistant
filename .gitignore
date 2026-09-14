@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Environment & secrets (never commit)
+.env
+.env.local
+*.pem
+*.key
+credentials*.json
+
+# Data — real transcripts a client adds are kept out of git; the bundled
+# [SAMPLE] transcripts and README are committed so the demo works out of the box.
+backend/data/transcripts/real/
+backend/data/.ingest/
+backend/data/chroma/
+backend/data/vector-store/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Node (if any tooling is ever added)
+node_modules/
+
+# Logs
+*.log
+logs/

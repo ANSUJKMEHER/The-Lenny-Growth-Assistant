@@ -1,0 +1,35 @@
+[project]
+name = "lenny-growth-assistant"
+version = "0.1.0"
+description = "AI-powered conversational assistant grounded in Lenny's Podcast transcripts."
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+    "fastapi>=0.111,<0.142",
+    "uvicorn[standard]>=0.30,<1.0",
+    "sqlalchemy[asyncio]>=2.0.30,<2.1",
+    "asyncpg>=0.29,<0.31",
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.3,<3.0",
+    "httpx>=0.27,<0.29",
+    "python-dotenv>=1.0,<2.0",
+    "markdown>=3.6,<4.0",
+    "nh3>=0.2.17,<1.0",
+    "beautifulsoup4>=4.12,<5.0",
+    "python-multipart>=0.0.9,<1.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.2,<9.0",
+    "pytest-asyncio>=0.23,<1.0",
+    "aiosqlite>=0.20,<1.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

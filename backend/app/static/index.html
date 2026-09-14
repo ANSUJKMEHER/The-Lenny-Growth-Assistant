@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Lenny Growth Assistant</title>
+  <meta name="description" content="Grounded AI assistant over Lenny's Podcast transcripts." />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">◆</span>
+        <div class="brand-text">
+          <h1>Lenny Growth</h1>
+          <p class="brand-sub">Assistant</p>
+        </div>
+      </div>
+
+      <button class="btn btn-primary new-chat" id="newChatBtn" type="button">
+        <span aria-hidden="true">+</span> New chat
+      </button>
+
+      <nav class="session-list" id="sessionList" aria-label="Chat sessions"></nav>
+
+      <div class="sidebar-footer">
+        <button class="provider-btn" id="providerBtn" type="button"
+                aria-haspopup="dialog" aria-controls="providerDialog">
+          <span class="status-dot" id="providerDot" aria-hidden="true"></span>
+          <span id="providerLabel">Loading…</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main chat -->
+    <main class="chat">
+      <header class="chat-header">
+        <button class="icon-btn sidebar-toggle" id="sidebarToggle" type="button"
+                aria-label="Toggle sidebar">☰</button>
+        <h2 id="chatTitle">New chat</h2>
+        <div class="chat-header-right">
+          <span class="model-badge" id="modelBadge">—</span>
+        </div>
+      </header>
+
+      <div class="messages" id="messages" aria-live="polite">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-mark" aria-hidden="true">◆</div>
+          <h3>Ask Lenny anything about product &amp; growth</h3>
+          <p>Grounded answers from Lenny's Podcast transcripts.</p>
+          <div class="suggestion-row">
+            <button class="suggestion" type="button" data-prompt="What does Lenny say about product-market fit?">What does Lenny say about product-market fit?</button>
+            <button class="suggestion" type="button" data-prompt="Write a Ship 30 for 30 essay on activation and retention">Write a Ship 30 essay on activation &amp; retention</button>
+            <button class="suggestion" type="button" data-prompt="Make an HTML checklist for improving onboarding activation">Make an HTML onboarding checklist</button>
+          </div>
+        </div>
+      </div>
+
+      <form class="composer" id="composer" autocomplete="off">
+        <textarea id="input" rows="1" placeholder="Ask a question about product or growth…"
+                  aria-label="Message input"></textarea>
+        <button class="btn btn-send" id="sendBtn" type="submit" aria-label="Send message">
+          <span aria-hidden="true">➤</span>
+        </button>
+      </form>
+      <p class="composer-hint" id="composerHint">
+        Answers are grounded in the transcript knowledge base. <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for a new line.
+      </p>
+    </main>
+
+    <!-- Artifact viewer -->
+    <aside class="artifact-panel" id="artifactPanel" hidden aria-label="Artifact viewer">
+      <header class="artifact-header">
+        <h3>Artifact</h3>
+        <button class="icon-btn" id="closeArtifact" type="button" aria-label="Close artifact viewer">✕</button>
+      </header>
+      <div class="artifact-tabs" id="artifactTabs" role="tablist"></div>
+      <div class="artifact-body" id="artifactBody"></div>
+    </aside>
+  </div>
+
+  <!-- Provider switcher dialog -->
+  <div class="dialog-backdrop" id="providerDialog" hidden role="dialog"
+       aria-modal="true" aria-labelledby="providerDialogTitle">
+    <div class="dialog">
+      <h3 id="providerDialogTitle">Model provider</h3>
+      <p class="dialog-sub">Switch the underlying model without touching code. The UI and API reflect the active provider immediately.</p>
+      <div class="provider-options" id="providerOptions"></div>
+      <div class="dialog-actions">
+        <button class="btn" id="closeProviderDialog" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <!-- Vendor libs bundled locally (no CDN dependency at runtime) -->
+  <script src="/static/marked.min.js"></script>
+  <script src="/static/purify.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

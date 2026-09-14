@@ -1,0 +1,45 @@
+name: lenny-growth-assistant
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lenny
+      POSTGRES_PASSWORD: lenny
+      POSTGRES_DB: lenny
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lenny -d lenny"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      # Optional: only needed to pass custom cloud API keys. The app has safe
+      # defaults for everything else, so a fresh clone works without `.env`.
+      - path: .env
+        required: false
+    environment:
+      # Override the DB URL to reach the internal service regardless of .env:
+      DATABASE_URL: postgresql+asyncpg://lenny:lenny@db:5432/lenny
+      # Ollama runs on the host machine; reach it via the docker host alias.
+      # On Linux this works out of the box. On macOS/Windows, set the host IP
+      # in your .env (e.g. OLLAMA_BASE_URL=http://host.docker.internal:11434).
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pgdata:
