@@ -371,6 +371,7 @@
   $("#closeArtifact").addEventListener("click", () => (artifactPanel.hidden = true));
 
   $("#providerBtn").addEventListener("click", () => {
+    loadConfig();
     $("#providerDialog").hidden = false;
   });
   $("#closeProviderDialog").addEventListener("click", () => {
@@ -378,6 +379,11 @@
   });
   $("#providerDialog").addEventListener("click", (e) => {
     if (e.target === $("#providerDialog")) $("#providerDialog").hidden = true;
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("#providerDialog").hidden) {
+      $("#providerDialog").hidden = true;
+    }
   });
 
   // Suggestion chips.
