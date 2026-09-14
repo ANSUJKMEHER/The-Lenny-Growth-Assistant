@@ -10,8 +10,9 @@ flow, agent routing, model toggling, security, and deployment topology.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Frontend (backend/app/static) — vanilla JS SPA, no build step   │
-│  chat · session list · provider switcher · artifact viewer       │
+│  Frontend (frontend/) — React + TypeScript + Vite SPA          │
+│  built to backend/app/static · chat · sessions · provider ·     │
+│  artifact viewer                                                │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │ JSON over REST
 ┌───────────────────────────────▼─────────────────────────────────┐
@@ -105,10 +106,11 @@ transcript (official fetch / local file / URL)
    → persist source + chunks
 ```
 
-**Official dataset:** on first boot (or `POST /api/ingest/fetch`) the app fetches
-50 real Lenny's Podcast transcripts from the public
+**Official dataset:** on first boot the app fetches a **starter set of 10 real
+episodes** from the public
 [`LennysNewsletter/lennys-newsletterpodcastdata`](https://github.com/LennysNewsletter/lennys-newsletterpodcastdata)
-starter pack (personal/non-commercial license) and ingests them. Raw files are
+starter pack (personal/non-commercial license) and ingests them; `POST
+/api/ingest/fetch` ingests the **full pack (~50 episodes)**. Raw files are
 fetched at runtime, never committed. If the network is unavailable the app falls
 back to the bundled sample transcripts.
 
@@ -227,7 +229,7 @@ model rather than crashing the loop.
   1. **Server** (`core/security.py`): `nh3` allowlist sanitization — a fixed set of
      structural tags/attributes, safe URL schemes only (`http/https/mailto`), no
      `<script>`, no `on*` handlers, comments stripped, `rel=noopener noreferrer nofollow`.
-  2. **Client** (`app.js`): HTML artifacts render inside `<iframe sandbox="">` (no
+  2. **Client** (React SPA): HTML artifacts render inside `<iframe sandbox="">` (no
      `allow-same-origin`, no `allow-scripts`), `referrerpolicy=no-referrer`, so even
      if sanitization were bypassed the artifact cannot touch the app origin.
 - **Markdown** is rendered server-side to HTML and passed through the same sanitizer;
@@ -268,6 +270,4 @@ model rather than crashing the loop.
 - New provider → subclass `LLMProvider`, register in `factory.build_provider`.
 - New skill/tool → subclass `Tool`, add to `build_default_tools`.
 - New transcript fetcher → extend `core/rag/ingest.py`.
-- Streaming → add an SSE path that yields agent `complete()` deltas (providers
-  already return full responses; streaming is an additive change).
 - pgvector → replace JSONB cosine with `ORDER BY embedding <-> :q` in `retriever`.

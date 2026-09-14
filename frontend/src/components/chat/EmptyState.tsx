@@ -13,9 +13,9 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ onSelectPrompt }) => {
       prompt: "What does Lenny say about measuring product activation and retention?",
     },
     {
-      title: "Roman Ugarte (Grok Bot Architecture)",
-      desc: "Examine the technical & product design trade-offs behind rapid AI product shipping.",
-      prompt: "What does Roman Ugarte say about building Grok Bot in a month?",
+      title: "Product-Market Fit & Positioning",
+      desc: "How Lenny and his guests define PMF, when to validate it, and how to position a product.",
+      prompt: "What does Lenny say about finding product-market fit and positioning?",
     },
     {
       title: "Ship 30 for 30 Essay: Retention",
@@ -33,7 +33,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ onSelectPrompt }) => {
     <div className="empty-brief-container">
       <div className="brief-hero-header">
         <h2>Lenny Knowledge Retrieval &amp; Synthesis</h2>
-        <p>Grounding across 50 podcast episodes with verifiable timestamps and artifact rendering.</p>
+        <p>Grounding across Lenny's Podcast transcripts with verifiable timestamps and artifact rendering.</p>
       </div>
 
       <div className="brief-prompts-grid">

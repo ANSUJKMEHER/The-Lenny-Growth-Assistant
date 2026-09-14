@@ -48,15 +48,12 @@ export async function streamMessage(
       for (const block of blocks) {
         if (!block.trim()) continue;
 
-        let eventType = "message";
         let dataStr = "";
 
         const lines = block.split("\n");
         for (const line of lines) {
-          if (line.startsWith("event:")) {
-            eventType = line.slice(6).trim();
-          } else if (line.startsWith("data:")) {
-            dataStr = line.slice(5).trim();
+          if (line.startsWith("data:")) {
+            dataStr += line.slice(5).trim();
           }
         }
 
@@ -64,15 +61,26 @@ export async function streamMessage(
 
         try {
           const parsed = JSON.parse(dataStr);
+          // The backend serializes each event as a JSON object whose `type`
+          // field carries the event name and whose `data` field carries the
+          // payload (e.g. {"type":"token","data":"…"}). Dispatch on `type`.
+          const type: string = parsed.type || "message";
 
-          if (eventType === "status") {
-            callbacks.onStatus?.(parsed.step || parsed.tool || "Working...");
-          } else if (eventType === "token") {
-            callbacks.onToken?.(parsed.delta || "");
-          } else if (eventType === "done") {
-            callbacks.onDone?.(parsed.message, parsed.artifacts || []);
-          } else if (eventType === "error") {
-            callbacks.onError?.(new Error(parsed.error || "Streaming error"));
+          switch (type) {
+            case "status":
+              callbacks.onStatus?.(parsed.data || parsed.step || parsed.tool || "Working...");
+              break;
+            case "token":
+              callbacks.onToken?.(parsed.data || parsed.delta || "");
+              break;
+            case "done": {
+              const payload = parsed.data || parsed;
+              callbacks.onDone?.(payload.message, payload.artifacts || []);
+              break;
+            }
+            case "error":
+              callbacks.onError?.(new Error(parsed.data || parsed.error || "Streaming error"));
+              break;
           }
         } catch (e) {
           console.warn("Failed to parse SSE line:", dataStr, e);

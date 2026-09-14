@@ -46,9 +46,18 @@ async def get_runtime_model(db: AsyncSession, provider: Provider) -> str:
     return defaults[provider]
 
 
+async def _upsert(db: AsyncSession, key: str, value: str) -> None:
+    """Insert or update a setting (idempotent; never raises on re-set)."""
+    row = await db.get(AppSetting, key)
+    if row is None:
+        db.add(AppSetting(key=key, value=value))
+    else:
+        row.value = value
+
+
 async def set_runtime_provider(db: AsyncSession, provider: Provider) -> None:
-    db.add(AppSetting(key=_PROVIDER_KEY, value=provider.value))
+    await _upsert(db, _PROVIDER_KEY, provider.value)
 
 
 async def set_runtime_model(db: AsyncSession, provider: Provider, model: str) -> None:
-    db.add(AppSetting(key=f"{_MODEL_KEY}.{provider.value}", value=model))
+    await _upsert(db, f"{_MODEL_KEY}.{provider.value}", model)

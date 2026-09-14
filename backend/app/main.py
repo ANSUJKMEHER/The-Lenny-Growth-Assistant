@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
 settings = get_settings()
 app = FastAPI(
     title="The Lenny Growth Assistant",
-    version="0.1.0",
+    version="0.2.0",
     description="Grounded AI assistant over Lenny's Podcast transcripts.",
     lifespan=lifespan,
 )

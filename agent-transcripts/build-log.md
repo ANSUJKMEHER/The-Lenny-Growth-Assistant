@@ -183,12 +183,42 @@ SSE endpoint's graceful 503 (no provider) path.
 **Result:** 40 tests pass, including the new scope-guard and JSON-serialization
 regressions.
 
+## Iteration 12 — React migration + final polish
+
+**What:** a final review against the brief and a fresh-clone walkthrough surfaced a
+stack/documentation mismatch and two real defects.
+
+**Corrections:**
+- **React + TypeScript + Vite frontend.** The earlier "vanilla JS, no build step"
+  decision (Iterations 1 & 9) was reconsidered: the Artifact Viewer and token
+  streaming are substantially cleaner with component state, and the Docker build
+  compiles the SPA anyway — so there is no added evaluator friction. The frontend
+  now lives in `frontend/` and is built to `backend/app/static/`. README,
+  `architecture.md`, and `design.md` were updated to match (they previously still
+  described a vanilla-JS SPA).
+- **SSE event parsing bug.** The backend emits each stream event as JSON
+  `{"type": "token|status|done|error", "data": …}` with no `event:` line, but the
+  client keyed off the SSE `event:` field — so every event was silently dropped
+  (no tokens, and `done` never fired, leaving the UI busy). Fixed the client to
+  dispatch on the JSON `type` and read `data` (and `data.message`/`data.artifacts`
+  for `done`).
+- **Provider-toggle crash on 2nd switch.** `settings_store` wrote `app_settings`
+  with `db.add`, so switching the provider a second time collided with the existing
+  primary key and raised `IntegrityError`. Replaced with an idempotent upsert
+  (`get` then update-or-insert) and added a regression test.
+- **Docs/versioning alignment.** Bumped `main.py`/`pyproject.toml` to `0.2.0` to
+  match the frontend; corrected "50 episodes on first boot" → "a starter set of 10
+  (full pack via `POST /api/ingest/fetch`)"; removed stale "streaming deferred"
+  and "typing indicator, not streaming" wording.
+
+**Result:** 43 tests pass (3 new settings-store regressions).
+
 ## Verification
 
-- `pytest -q` → **40 passed** (retrieval, speaker-turn chunking, security,
+- `pytest -q` → **43 passed** (retrieval, speaker-turn chunking, security,
   ingestion, agent + skills + length enforcement, API validation + graceful LLM
   failure + streaming endpoint, agent-runtime selection, off-topic scope guard,
-  and SSE `done` JSON serialization).
+  SSE `done` JSON serialization, and settings-store upsert).
 - Smoke test: server boots, `/health` and `/health/ready` return correct status,
   frontend + static assets serve, all 11 API routes registered in OpenAPI.
 

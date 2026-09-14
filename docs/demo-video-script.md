@@ -14,7 +14,7 @@
 ## 0:20–1:10 — Show the product (grounded chat)
 
 - Open the app, click a suggested prompt: *"What does Lenny say about product-market fit?"*
-- Point out: typing indicator → a clear answer with **citation chips** showing the source episode.
+- Point out: status indicator + token streaming → a clear answer with **citation chips** showing the source episode.
 - Ask a follow-up *"How do I measure it?"* → note it uses session context.
 - Ask something unsupported → show it **says it doesn't cover it** instead of hallucinating.
 

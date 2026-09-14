@@ -8,9 +8,9 @@ Automated tests cover API, retrieval, ingestion, security, and agent routing
 
 | # | Action | Expected result | Pass? |
 |---|---|---|---|
-| 1 | Open http://localhost:8000 | App loads; sidebar shows "Lenny Growth / Assistant", "New chat", and 3 suggested prompts; provider badge shows `ollama · llama3.1`. | ☐ |
+| 1 | Open http://localhost:8000 | App loads; sidebar shows "Lenny Growth / Assistant", "New chat", and 4 suggested prompts; provider badge shows `ollama · llama3.1`. | ☐ |
 | 2 | Click "New chat" | Empty state appears; no artifacts panel. | ☐ |
-| 3 | Click a suggested prompt (e.g. "product-market fit") | User bubble appears, typing indicator shows, then a grounded answer with **citation chips** (episode title + excerpt). | ☐ |
+| 3 | Click a suggested prompt (e.g. "product-market fit") | User bubble appears, a status indicator + streaming answer shows, then a grounded answer with **citation chips** (episode title + excerpt). | ☐ |
 | 4 | Ask: "What does Lenny say about activation?" | Answer cites the retention/activation transcript; header title becomes the question. | ☐ |
 | 5 | Ask a follow-up: "And how do I measure it?" | Answer uses conversation context (no re-explaining everything). | ☐ |
 | 6 | Ask something unsupported: "What is quantum chromodynamics?" | Assistant says the KB doesn't cover it — **no fabricated answer, no fake citation**. | ☐ |

@@ -48,7 +48,7 @@ one-command startup.
 ## Architecture at a glance
 
 ```
-Browser (vanilla JS SPA)
+Browser (React + TypeScript SPA)
    │  REST (JSON)
    ▼
 FastAPI ──▶ API routers (sessions · chat · config · ingest · artifacts)
@@ -78,8 +78,9 @@ Full details, DB schema, endpoint contracts, and the agent-routing design are in
 
 `run.sh` starts Ollama (pulling `llama3.1` + `nomic-embed-text` if needed), creates
 `.env` from `.env.example`, and boots the stack with Docker Compose (or a local
-fallback). On first boot the app also auto-fetches the **official Lenny's Podcast
-starter dataset** (50 real episodes) so answers are grounded in real content.
+fallback). On first boot the app also auto-fetches a **starter set of real Lenny's
+Podcast episodes** so answers are grounded in real content (the full pack is one
+`POST /api/ingest/fetch` away).
 
 ### Quick start (Docker Compose)
 
@@ -100,10 +101,10 @@ docker compose up --build -d
 open http://localhost:8000
 ```
 
-The API **auto-fetches 50 real Lenny's Podcast transcripts** on first start (see
-[Ingesting transcripts](#ingesting-transcripts)), so the demo works end-to-end
-immediately with genuine grounding. If the network is unavailable, it falls back to
-the bundled clearly-marked `[SAMPLE]` transcripts.
+The API **auto-fetches a starter set of real Lenny's Podcast transcripts** on first
+start (see [Ingesting transcripts](#ingesting-transcripts)), so the demo works
+end-to-end immediately with genuine grounding. If the network is unavailable, it
+falls back to the bundled clearly-marked `[SAMPLE]` transcripts.
 
 > **macOS / Windows note:** Docker can't reach `localhost` for Ollama directly.
 > Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in `.env` (the Compose
@@ -198,8 +199,9 @@ See [docs/architecture.md §5](docs/architecture.md) for the full trade-off.
 
 ## Ingesting transcripts
 
-The knowledge base is **auto-populated on first boot** with the official Lenny's
-Podcast starter dataset (50 real episodes; source:
+The knowledge base is **auto-populated on first boot** with a starter set of the
+official Lenny's Podcast dataset (10 real episodes; the full pack — ~50 episodes — is
+available via `POST /api/ingest/fetch`. Source:
 [`LennysNewsletter/lennys-newsletterpodcastdata`](https://github.com/LennysNewsletter/lennys-newsletterpodcastdata),
 used under its personal/non-commercial license). Transcripts are fetched at
 runtime rather than committed, chunked (with speaker + timestamp preserved), and
@@ -273,8 +275,9 @@ lenny-growth-assistant/
 │   │   │   ├── llm/          # provider-agnostic LLM (ollama/anthropic/openai)
 │   │   │   ├── agent/        # tool-calling loop + tools + skills
 │   │   │   └── rag/          # chunker, embedder, retriever, ingest
-│   │   └── static/           # SPA (index.html, styles.css, app.js, vendor libs)
+│   │   └── static/           # built React SPA (Vite output, served by FastAPI)
 │   └── data/transcripts/     # transcript files + README (SAMPLE data)
+├── frontend/                 # React + TypeScript + Vite source (build → static/)
 └── tests/                    # pytest suite
 ```
 

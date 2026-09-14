@@ -162,14 +162,11 @@ export const App: React.FC = () => {
     setStreamingContent("");
     setCurrentStepStatus("Analyzing request...");
 
-    let accumulatedTokens = "";
-
     await streamMessage(activeId, prompt, {
       onStatus: (stepText) => {
         setCurrentStepStatus(stepText);
       },
       onToken: (token) => {
-        accumulatedTokens += token;
         setStreamingContent((prev) => prev + token);
       },
       onDone: (doneMessage, newArtifacts) => {

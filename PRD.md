@@ -55,12 +55,12 @@ because the whole value proposition rests on trust.
 - PostgreSQL persistence: conversations, messages, artifacts, sources, chunks, runtime settings.
 - Ship 30 for 30 skill with **encoded** writing principles.
 - Artifact Viewer (side-by-side), Markdown + HTML rendering, sandboxed isolation.
+- SSE token streaming with progress statuses (`status`/`token`/`done`/`error` events) and a non-streaming fallback.
 - Docker Compose one-command startup, `.env.example`, structured logging, graceful failure.
 - Tests (API, retrieval, ingestion, security, agent) + manual UI test plan.
 
 **Excluded (deliberately):**
 - **Auth / multi-user accounts** — out of scope for a take-home; sessions are the isolation boundary.
-- **Streaming (SSE) responses** — a nicer UX but adds cross-provider complexity; deferred. The UI shows a typing indicator and full-turn responses.
 - **Cloud vector DB (pgvector/Pinecone)** — the corpus is small; embeddings are stored as JSON arrays and similarity is computed in Python, keeping Docker minimal and the stack portable.
 - **Fine-tuned re-ranking** — BM25 + cosine is sufficient for the demo corpus size.
 - **Auth-gated artifact sharing** — artifacts are per-session, local to the app.
