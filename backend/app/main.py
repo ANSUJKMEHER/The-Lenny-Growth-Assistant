@@ -123,6 +123,8 @@ app.include_router(ingest.router)
 app.include_router(artifacts.router)
 
 # Static frontend + vendor assets.
+if (_STATIC_DIR / "assets").exists():
+    app.mount("/assets", StaticFiles(directory=str(_STATIC_DIR / "assets")), name="assets")
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 

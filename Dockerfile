@@ -1,3 +1,11 @@
+# Multi-stage build: compile React frontend, then run FastAPI backend.
+FROM node:20-alpine AS frontend-builder
+WORKDIR /build/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.11-slim
 
 # System deps: build tools for asyncpg/nh3 wheels, curl for healthchecks.
@@ -13,9 +21,10 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy application code.
+# Copy application code and compiled React static assets.
 COPY pyproject.toml ./
 COPY backend/ ./backend/
+COPY --from=frontend-builder /build/backend/app/static ./backend/app/static
 COPY tests/ ./tests/
 
 # The app is served from backend/; expose the FastAPI port.
