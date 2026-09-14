@@ -1,5 +1,5 @@
 """Agent routing and skill tests with a deterministic fake provider."""
-from app.core.agent.agent import Agent, build_default_tools
+from app.core.agent.agent import Agent, build_default_tools, off_topic_response
 from app.core.agent.context import ToolContext
 from app.core.agent.skills.ship30 import Ship30EssaySkill
 from app.core.llm.base import ChatMessage, LLMProvider, LLMResponse, ToolCall
@@ -114,3 +114,29 @@ async def test_ship30_skill_does_not_expand_long_essay(db):
 def test_default_tools_include_all_capabilities():
     names = {t.name for t in build_default_tools()}
     assert {"search_transcripts", "list_sources", "write_ship30_essay", "generate_artifact"} <= names
+
+
+def test_off_topic_guard_refuses_code_and_game_requests():
+    assert off_topic_response("generate a tic tac toe game") is not None
+    assert off_topic_response("write a python script to scrape data") is not None
+    assert off_topic_response("build me a snake game") is not None
+    assert off_topic_response("implement a binary search algorithm") is not None
+
+
+def test_off_topic_guard_allows_product_and_growth_questions():
+    assert off_topic_response("What does Lenny say about retention?") is None
+    assert off_topic_response("Write a Ship 30 for 30 essay on activation") is None
+    assert off_topic_response("Make an HTML checklist for onboarding") is None
+    assert off_topic_response("How do I find product-market fit?") is None
+    assert off_topic_response("") is None
+
+
+async def test_agent_short_circuits_off_topic_without_calling_model(db):
+    provider = FakeProvider([LLMResponse(content="should not be used")])
+    ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
+    result = await Agent(provider).run(
+        ctx, [ChatMessage(role="user", content="generate a tic tac toe game")]
+    )
+    assert result.grounded is False
+    assert "Lenny Growth Assistant" in result.content
+    assert provider.calls == [], "off-topic requests must not invoke the LLM"

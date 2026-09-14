@@ -165,6 +165,7 @@ svg.i { width: 18px; height: 18px; display: block; }
 
 .session-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -258,7 +259,7 @@ svg.i { width: 18px; height: 18px; display: block; }
 .status-dot.warn { background: var(--warn); }
 
 /* Main chat */
-.chat { display: flex; flex-direction: column; min-width: 0; background: var(--bg); background-image: var(--bg-gradient); }
+.chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); background-image: var(--bg-gradient); }
 
 .chat-header {
   display: flex;
@@ -319,6 +320,7 @@ svg.i { width: 18px; height: 18px; display: block; }
 /* Messages */
 .messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 28px 22px;
   display: flex;
@@ -638,6 +640,7 @@ svg.i { width: 18px; height: 18px; display: block; }
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   box-shadow: var(--shadow-lg);
 }
 .artifact-header {
@@ -669,7 +672,7 @@ svg.i { width: 18px; height: 18px; display: block; }
 }
 .artifact-tab:hover { border-color: var(--accent); }
 .artifact-tab.active { background: var(--grad); border-color: transparent; color: #fff; }
-.artifact-body { flex: 1; overflow-y: auto; padding: 18px 20px; background: var(--surface); }
+.artifact-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px; background: var(--surface); }
 
 .artifact-frame {
   width: 100%;
@@ -695,6 +698,52 @@ svg.i { width: 18px; height: 18px; display: block; }
 .prose code { font-family: var(--mono); font-size: 13px; background: var(--surface-2); padding: 2px 5px; border-radius: 5px; }
 .prose pre { background: #1f2430; color: #e6e8ef; padding: 14px 16px; border-radius: var(--radius-sm); overflow-x: auto; }
 .prose pre code { background: none; color: inherit; padding: 0; }
+
+/* Code blocks: ChatGPT-style header with a language label + copy button */
+.code-block {
+  position: relative;
+  margin: 0.8em 0;
+  border-radius: var(--radius-sm);
+  background: #1f2430;
+  overflow: hidden;
+}
+.code-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px 5px 14px;
+  background: #2a2f3d;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.code-block-lang {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #aab2c4;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.code-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cdd3e1;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  transition: background 0.14s var(--ease), color 0.14s var(--ease);
+}
+.code-copy-btn:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+.code-copy-btn svg.i { width: 13px; height: 13px; }
+.code-copy-btn.done { color: #5eead4; }
+.code-block pre {
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+}
 .prose blockquote { border-left: 3px solid var(--accent); margin: 0.6em 0; padding: 0.2em 1em; color: var(--text-muted); }
 .prose a { color: var(--accent); text-decoration: none; }
 .prose a:hover { text-decoration: underline; }

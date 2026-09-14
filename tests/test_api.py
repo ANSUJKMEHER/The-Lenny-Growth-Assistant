@@ -96,3 +96,43 @@ async def test_stream_endpoint_no_provider_503(client):
     conv_id = res.json()["id"]
     res = await client.post(f"/api/sessions/{conv_id}/messages/stream", json={"content": "hello"})
     assert res.status_code == 503
+
+
+async def test_stream_done_event_is_json_serializable(client, monkeypatch):
+    """Regression: the SSE ``done`` payload used to crash with
+    "Object of type datetime is not JSON serializable"."""
+    import json as _json
+
+    from app.api import chat
+    from app.core.agent.agent import AgentEvent, AgentResult
+
+    class FakeAgent:
+        async def run_stream(self, ctx, history):
+            yield AgentEvent(kind="token", data="hello")
+            yield AgentEvent(
+                kind="done", result=AgentResult(content="hello", grounded=False)
+            )
+
+    class FakeProvider:
+        name = "ollama"
+        model = "llama3.1"
+
+    async def fake_resolve(db):
+        return FakeProvider()
+
+    monkeypatch.setattr(chat, "resolve_provider", fake_resolve)
+    monkeypatch.setattr(chat, "select_agent", lambda provider: FakeAgent())
+
+    res = await client.post("/api/sessions", json={"title": "s"})
+    conv_id = res.json()["id"]
+    res = await client.post(
+        f"/api/sessions/{conv_id}/messages/stream", json={"content": "hello"}
+    )
+    assert res.status_code == 200
+
+    events = res.text.split("\n\n")
+    done = [e for e in events if e.startswith("data: ") and '"done"' in e]
+    assert done, "expected a done event"
+    for event in done:
+        payload = event[len("data: "):]
+        _json.loads(payload)  # must not raise

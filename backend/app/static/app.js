@@ -67,8 +67,65 @@
     return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
   }
 
-  function renderMarkdown(md) {
+  function markdownHtml(md) {
     return sanitize(marked.parse(md || ""));
+  }
+
+  function detectLanguage(pre) {
+    const code = pre.querySelector("code");
+    if (!code) return "";
+    for (const cls of code.classList) {
+      if (cls.startsWith("language-")) return cls.slice(9);
+    }
+    return "";
+  }
+
+  // Wrap each <pre> code block in a header with a language label + copy button
+  // (ChatGPT-style). Buttons are wired through event delegation in init().
+  function wrapCodeBlocks(container) {
+    if (!container) return;
+    container.querySelectorAll("pre").forEach((pre) => {
+      if (pre.closest(".code-block")) return;
+      const wrapper = document.createElement("div");
+      wrapper.className = "code-block";
+
+      const head = document.createElement("div");
+      head.className = "code-block-head";
+      const lang = el("span", "code-block-lang", detectLanguage(pre));
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "code-copy-btn";
+      btn.setAttribute("aria-label", "Copy code");
+      btn.title = "Copy code";
+      btn.appendChild(icon("icon-copy"));
+      btn.appendChild(el("span", null, "Copy"));
+      head.appendChild(lang);
+      head.appendChild(btn);
+
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(head);
+      wrapper.appendChild(pre);
+    });
+  }
+
+  function renderMarkdown(el, md) {
+    el.innerHTML = markdownHtml(md);
+    wrapCodeBlocks(el);
+  }
+
+  async function copyCodeBlock(btn) {
+    const block = btn.closest(".code-block");
+    const pre = block && block.querySelector("pre");
+    const code = pre ? pre.textContent : "";
+    const ok = await copyText(code, "Code copied");
+    if (ok) {
+      btn.classList.add("done");
+      btn.replaceChildren(icon("icon-check"), el("span", null, "Copied"));
+      setTimeout(() => {
+        btn.classList.remove("done");
+        btn.replaceChildren(icon("icon-copy"), el("span", null, "Copy"));
+      }, 1600);
+    }
   }
 
   async function copyText(text, label) {
@@ -167,7 +224,7 @@
 
     const contentWrap = el("div", "msg-content");
     const body = el("div", "msg-body prose");
-    body.innerHTML = renderMarkdown(content);
+    renderMarkdown(body, content);
     contentWrap.appendChild(body);
 
     if (role === "assistant") contentWrap.appendChild(buildActions(content));
@@ -300,7 +357,7 @@
       artifactBody.appendChild(frame);
     } else {
       const div = el("div", "prose");
-      div.innerHTML = renderMarkdown(a.content);
+      renderMarkdown(div, a.content);
       artifactBody.appendChild(div);
     }
   }
@@ -507,7 +564,7 @@
         content += token;
         const now = Date.now();
         if (now - lastRender > 60) {
-          body.innerHTML = renderMarkdown(content);
+          renderMarkdown(body, content);
           lastRender = now;
           scrollToBottom();
         }
@@ -518,7 +575,7 @@
         scrollToBottom();
       },
       finish() {
-        body.innerHTML = renderMarkdown(content);
+        renderMarkdown(body, content);
         body.classList.remove("streaming");
         statusEl.hidden = true;
         contentWrap.appendChild(actions);
@@ -726,6 +783,14 @@
       sendMessage(prompt);
     });
   });
+
+  // Delegated handler for code-block copy buttons (messages + artifacts).
+  const onCodeCopyClick = (e) => {
+    const btn = e.target.closest(".code-copy-btn");
+    if (btn) copyCodeBlock(btn);
+  };
+  messagesEl.addEventListener("click", onCodeCopyClick);
+  artifactBody.addEventListener("click", onCodeCopyClick);
 
   $("#sidebarToggle").addEventListener("click", () => {
     $("#sidebar").classList.toggle("open");

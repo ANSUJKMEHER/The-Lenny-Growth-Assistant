@@ -8,6 +8,7 @@ failing when, for example, Ollama isn't running.
 from __future__ import annotations
 
 import logging
+import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,13 @@ logger = logging.getLogger("app.llm.factory")
 
 # Preferred fallback order: local first (free, keyless), then cloud.
 FALLBACK_ORDER: list[Provider] = [Provider.OLLAMA, Provider.ANTHROPIC, Provider.OPENAI]
+
+# Healthcheck results are cached briefly so a burst of chat/config requests
+# doesn't re-run a (relatively expensive) probe against the model on every
+# message. 60s is long enough to absorb a conversation, short enough to notice
+# a model that has just been pulled or a provider that just went down.
+_HEALTH_TTL_SECONDS = 60.0
+_health_cache: dict[tuple[str, str], tuple[float, bool, str | None]] = {}
 
 
 def build_provider(provider: Provider, model: str | None = None) -> LLMProvider:
@@ -83,7 +91,17 @@ async def resolve_provider(
             # Fallback disabled: only the requested provider is tried.
             break
 
-        ok, reason = await instance.healthcheck()
+        # Probe with a short-lived cache so we don't pay a full completion on
+        # every message. Only skip the probe for a provider we have positively
+        # confirmed within the TTL window.
+        cache_key = (instance.name, instance.model)
+        cached = _health_cache.get(cache_key)
+        if cached and (time.monotonic() - cached[0]) < _HEALTH_TTL_SECONDS:
+            ok, reason = cached[1], cached[2]
+        else:
+            ok, reason = await instance.healthcheck()
+            _health_cache[cache_key] = (time.monotonic(), ok, reason)
+
         if ok:
             if provider is not order[0]:
                 logger.warning("Falling back from %s to %s", order[0].value, provider.value)

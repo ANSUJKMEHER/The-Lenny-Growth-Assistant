@@ -37,8 +37,8 @@ one-command startup.
 
 | Capability | Details |
 |---|---|
-| **Grounded chat** | RAG over **real Lenny's Podcast transcripts** (auto-fetched from the official public dataset on first boot). Answers cite the guest + episode + timestamp; the assistant admits when the corpus doesn't support an answer instead of hallucinating. |
-| **Streaming** | Real Server-Sent Events (SSE) token streaming with progress statuses ("Searching transcripts…") and a non-streaming fallback. |
+| **Grounded chat** | RAG over **real Lenny's Podcast transcripts** (auto-fetched from the official public dataset on first boot). Answers cite the guest + episode + timestamp; the assistant admits when the corpus doesn't support an answer instead of hallucinating. A scope guard keeps it on-topic (declines code/game/general-software requests with a helpful redirect). |
+| **Streaming** | Real Server-Sent Events (SSE) token streaming with progress statuses ("Searching transcripts…") and a non-streaming fallback. The chat is fully scrollable and code blocks ship with ChatGPT-style copy buttons. |
 | **Sessions** | Independent chat sessions with full history persisted in PostgreSQL. |
 | **Ship 30 for 30 skill** | A dedicated, encoded skill that turns grounded material into a ~1,250-word skimmable essay (hook, narrative arc, headings/bullets/bold, concrete takeaway) with length enforcement. |
 | **Artifact generation** | Produce Markdown documents or complete HTML/CSS snippets, rendered in a side-by-side **Artifact Viewer** with copy / download / open-in-new-tab. |

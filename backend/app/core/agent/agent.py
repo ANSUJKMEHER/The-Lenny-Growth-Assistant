@@ -13,6 +13,7 @@ Loop:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from app.core.agent.context import ToolContext
@@ -28,6 +29,15 @@ MAX_ITERATIONS = 8
 SYSTEM_PROMPT = """\
 You are "The Lenny Growth Assistant", an internal assistant for a product and
 growth team, grounded strictly in Lenny's Podcast transcripts.
+
+SCOPE (non-negotiable):
+- You ONLY answer product management and growth questions using Lenny's
+  Podcast material. You are NOT a general-purpose assistant, a coding
+  assistant, or a chatbot that writes software.
+- If the user asks for something outside this scope — e.g. "write a tic-tac-toe
+  game", "generate Python code", math problems, or unrelated trivia — decline
+  briefly, explain what you DO help with, and offer to answer a product/growth
+  question instead. Never generate code, programs, or ungrounded content.
 
 GROUNDING RULES (non-negotiable):
 - Answer only from the indexed transcript material. Use search_transcripts to
@@ -50,6 +60,49 @@ STYLE:
 - Be concise and specific. Use short paragraphs, bullets, and **bold** for
   emphasis. Answer follow-up questions using the conversation context.
 """
+
+# Deterministic scope guard: local models sometimes ignore the system prompt and
+# answer off-topic requests anyway. This catches the most obvious "write code /
+# build a game" requests before the model is invoked, so the assistant reliably
+# stays on-brand and returns instantly instead of generating an off-topic answer.
+_GAME_NAMES = re.compile(
+    r"tic\s*tac\s*toe|hangman|snake\s*game|rock\s*paper\s*scissors|sudoku|"
+    r"chess|pong|tetris|minesweeper|wordle|guess\s*the\s*number"
+)
+_OFF_TOPIC_VERBS = re.compile(
+    r"\b(write|generate|create|make|code|build|implement|program)\b"
+)
+# Words that unambiguously signal general software/coding work. Deliberately
+# excludes "html"/"css"/"website"/"checklist" because those are legitimate
+# artifact requests handled by generate_artifact.
+_OFF_TOPIC_OBJECTS = re.compile(
+    r"game|\bcode\b|program|script|function|class|algorithm|bot|software|repo|database|"
+    r"python|javascript|java\b|ruby|golang|\brust\b|c\+\+|\bsql\b|react|node\.?js|"
+    r"typescript|fibonacci|binary\s*search|sorting\s*algorithm"
+)
+
+_REFUSAL = (
+    "I'm the **Lenny Growth Assistant** — I answer product and growth questions "
+    "grounded in Lenny's Podcast transcripts, so I can't write code, games, or "
+    "general software.\n\n"
+    "Try me with something like:\n"
+    "- What does Lenny say about retention and activation?\n"
+    "- How do I know I've found product-market fit?\n"
+    "- Write a Ship 30 for 30 essay on positioning.\n"
+    "- Make an HTML checklist for improving onboarding."
+)
+
+
+def off_topic_response(text: str) -> str | None:
+    """Return a polite refusal for clearly out-of-scope requests, else ``None``."""
+    t = (text or "").strip().lower()
+    if not t:
+        return None
+    if _GAME_NAMES.search(t):
+        return _REFUSAL
+    if _OFF_TOPIC_VERBS.search(t) and _OFF_TOPIC_OBJECTS.search(t):
+        return _REFUSAL
+    return None
 
 
 @dataclass
@@ -123,6 +176,19 @@ class Agent:
         streamed token-by-token (where the provider supports it) and tool
         invocations are surfaced as ``tool`` events for client progress.
         """
+        # Short-circuit clearly out-of-scope requests without a model call.
+        last_user = next(
+            (m.content for m in reversed(history) if m.role == "user"), ""
+        )
+        refusal = off_topic_response(last_user)
+        if refusal:
+            yield AgentEvent(kind="token", data=refusal)
+            yield AgentEvent(
+                kind="done",
+                result=AgentResult(content=refusal, grounded=False, tool_trace=[]),
+            )
+            return
+
         messages = [ChatMessage(role="system", content=SYSTEM_PROMPT), *history]
         tool_specs = [t.spec() for t in self.tools]
         trace: list[str] = []

@@ -177,17 +177,19 @@ async def send_message_stream(
 
     async def event_stream():
         run_stream = getattr(agent, "run_stream", None)
+        # Emit immediate feedback so the UI shows activity before the first
+        # token arrives (local models can take a while to warm up).
+        yield sse({"type": "status", "data": "Thinking…"})
         try:
             if run_stream is None:
                 # Non-streaming runtime (e.g. the Claude Agent SDK path): run
                 # once and emit the full answer as a single token event.
                 result = await agent.run(ctx, history)
-                yield sse({"type": "status", "data": "Thinking…"})
                 yield sse({"type": "token", "data": result.content})
                 response = await _finalize_turn(
                     db, conv, user_msg, ctx, ctx.provider, result.content, result.grounded
                 )
-                yield sse({"type": "done", "data": response.model_dump()})
+                yield sse({"type": "done", "data": response.model_dump(mode="json")})
                 return
 
             result = None
@@ -207,7 +209,7 @@ async def send_message_stream(
             response = await _finalize_turn(
                 db, conv, user_msg, ctx, ctx.provider, result.content, result.grounded
             )
-            yield sse({"type": "done", "data": response.model_dump()})
+            yield sse({"type": "done", "data": response.model_dump(mode="json")})
         except ProviderError as exc:
             yield sse({"type": "error", "data": f"LLM failure: {exc}"})
         except Exception as exc:  # pragma: no cover - defensive

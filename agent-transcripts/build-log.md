@@ -144,18 +144,56 @@ inspection before running, rewrote `chat.py` cleanly with a shared `_prepare_tur
 **Result:** 36 tests pass; verified live fetch (50 episodes → 4,622 chunks) and the
 SSE endpoint's graceful 503 (no provider) path.
 
+## Iteration 11 — Bug fixes & hardening from live QA
+
+**What:** a real run surfaced four concrete defects plus an off-brand behavior:
+
+1. **`datetime` SSE crash.** The streaming `done` event called
+   `json.dumps(response.model_dump())`, but Pydantic v2's `model_dump()` returns
+   `datetime` objects, so every streamed turn died with
+   `Object of type datetime is not JSON serializable`.
+   **Correction:** use `model_dump(mode="json")` (JSON-safe) in both SSE `done`
+   emissions, plus a regression test that parses every `done` event as JSON.
+
+2. **Chat area not scrollable.** The flex/grid containers lacked `min-height: 0`,
+   so `.messages` grew past the viewport instead of scrolling (content clipped,
+   only a horizontal code scrollbar visible).
+   **Correction:** added `min-height: 0` to `.messages`, `.session-list`,
+   `.artifact-body`, `.chat`, and `.artifact-panel`.
+
+3. **No per-code-block copy button.** Only a hover “copy response” button existed.
+   **Correction:** markdown code blocks are now wrapped in a ChatGPT-style header
+   with a language label and a copy button (event-delegated, works for streaming
+   responses and rendered artifacts).
+
+4. **~5-minute first-response latency.** `resolve_provider()` ran a *full*
+   completion as a healthcheck on every request — on a slow local model that's an
+   entire extra generation per message. **Correction:** `OllamaProvider.healthcheck`
+   now probes with `num_predict=1` (single token, milliseconds), the Anthropic/
+   OpenAI providers use `max_tokens=1`, and `resolve_provider` caches probe results
+   for 60s.
+
+5. **Off-topic answers (e.g. “generate a tic tac toe game” → a tic-tac-toe
+   implementation).** The system prompt now makes scope explicit (product/growth
+   only, no code/games/general software), and a conservative deterministic scope
+   guard short-circuits clearly off-topic requests *before* the model is invoked —
+   returning a branded refusal instantly. Legitimate artifact requests (HTML
+   checklist, landing page) are explicitly whitelisted from the guard.
+
+**Result:** 40 tests pass, including the new scope-guard and JSON-serialization
+regressions.
+
 ## Verification
 
-- `pytest -q` → **36 passed** (retrieval, speaker-turn chunking, security,
+- `pytest -q` → **40 passed** (retrieval, speaker-turn chunking, security,
   ingestion, agent + skills + length enforcement, API validation + graceful LLM
-  failure + streaming endpoint, and agent-runtime selection).
+  failure + streaming endpoint, agent-runtime selection, off-topic scope guard,
+  and SSE `done` JSON serialization).
 - Smoke test: server boots, `/health` and `/health/ready` return correct status,
   frontend + static assets serve, all 11 API routes registered in OpenAPI.
 
 ## Known, deliberate trade-offs
 
-- **No streaming (SSE)** — full-turn responses + typing indicator; streaming is an
-  additive change (documented in PRD/architecture).
 - **JSONB vs pgvector** — fine for demo-scale corpus; one-file swap to scale.
 - **Two agent runtimes** (built-in loop + optional Claude Agent SDK) — a small amount
   of glue in exchange for satisfying both the "use the Claude Agent SDK" requirement

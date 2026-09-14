@@ -143,3 +143,30 @@ class AnthropicProvider(LLMProvider):
             finish_reason=data.get("stop_reason") or "stop",
             raw=data,
         )
+
+    async def healthcheck(self) -> tuple[bool, str | None]:
+        """Cheap probe: a single-token completion instead of a full reply."""
+        import httpx as _httpx
+
+        try:
+            async with _httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(
+                    f"{self.base_url}/messages",
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "max_tokens": 1,
+                    },
+                    headers={
+                        "x-api-key": self.api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                )
+        except _httpx.HTTPError as exc:
+            return False, f"Anthropic unreachable: {exc}"
+        if resp.status_code == 401:
+            return False, "Anthropic API key missing or invalid"
+        if resp.status_code >= 400:
+            return False, f"Anthropic HTTP {resp.status_code}: {resp.text[:200]}"
+        return True, None

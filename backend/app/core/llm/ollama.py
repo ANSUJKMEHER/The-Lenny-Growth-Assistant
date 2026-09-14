@@ -137,6 +137,37 @@ class OllamaProvider(LLMProvider):
             raw=data,
         )
 
+    async def healthcheck(self) -> tuple[bool, str | None]:
+        """Cheap liveness probe.
+
+        ``resolve_provider`` probes availability on every request, so a full
+        completion here would double latency on slow local models. Instead we
+        ask Ollama to generate a single token (``num_predict=1``), which
+        returns in milliseconds rather than minutes.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=min(self.timeout, 20.0)) as client:
+                resp = await client.post(
+                    f"{self.base_url}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "stream": False,
+                        "options": {"num_predict": 1, "temperature": 0},
+                    },
+                )
+        except httpx.TimeoutException as exc:
+            return False, f"Ollama timed out: {exc}"
+        except httpx.HTTPError as exc:
+            return False, f"Ollama unreachable at {self.base_url}: {exc}"
+        if resp.status_code >= 400:
+            return False, f"Ollama HTTP {resp.status_code}: {resp.text[:200]}"
+        try:
+            resp.json()
+        except json.JSONDecodeError as exc:
+            return False, f"Ollama returned non-JSON response: {exc}"
+        return True, None
+
     async def stream(
         self, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
     ):
