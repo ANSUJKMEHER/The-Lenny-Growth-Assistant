@@ -117,17 +117,19 @@ single source is a one-line extension.
 
 ## 5. Agent routing
 
-**Why a custom tool-loop instead of the Claude Agent SDK / Pi Coding Agent?** The
-brief names those as options, but the demo must run on **local Ollama with no API
-keys** — the Claude Agent SDK assumes an Anthropic API key, and Pi Coding Agent is a
-coding-focused CLI whose loop isn't designed to be embedded in a web assistant's
-request path. We therefore implement the *same* turn-based tool-use contract (the
-agent receives tool schemas, the model requests calls, the agent executes them and
-feeds results back) against our provider-agnostic LLM layer. This is the key design
-trade-off: we trade SDK convenience for the hard requirement of running identically
-on Ollama/Anthropic/OpenAI, and the loop is small enough to audit.
+The brief names the **Anthropic Claude Agent SDK** and **Pi Coding Agent** as the
+agent-layer runtime. We support **both** the official SDK *and* a built-in loop,
+selected at runtime by `AGENT_RUNTIME`:
 
-The agent runs a bounded tool-calling loop (`MAX_ITERATIONS = 8`):
+| `AGENT_RUNTIME` | Behavior |
+|---|---|
+| `auto` (default) | Use the **Claude Agent SDK** when the Anthropic provider is active *and* the SDK + Claude Code CLI are installed; otherwise use the built-in loop. |
+| `claude_sdk` | Require the Claude Agent SDK (error if the package or CLI is missing). |
+| `builtin` | Always use the built-in provider-agnostic loop. |
+
+### 5.1 Built-in loop (works with every provider)
+
+A bounded tool-calling loop (`MAX_ITERATIONS = 8`):
 
 ```
 system prompt + history + tool schemas
@@ -136,7 +138,45 @@ system prompt + history + tool schemas
    → else: final answer
 ```
 
-Tools/skills (each exposes a JSON-schema function definition):
+This is the runtime used for the **local Ollama demo** and any provider without the
+SDK. It implements the same turn-based tool-use contract as the Claude Agent SDK
+(tool schemas in → model requests calls → agent executes them → feeds results back),
+but against our provider-agnostic LLM layer.
+
+### 5.2 Claude Agent SDK (Anthropic path, optional)
+
+`core/agent/claude_sdk_agent.py::ClaudeSDKAgent` drives the official
+`claude-agent-sdk`. Our tools/skills are exposed to the SDK as an **in-process MCP
+server** (`create_sdk_mcp_server`), so the SDK's model performs the same routing as
+the built-in loop. Configuration: `allowed_tools=[]` (no filesystem/shell tools),
+`permission_mode="bypassPermissions"` (our tools are in-process and safe, and a web
+request can't answer interactive prompts), `setting_sources=[]` (deterministic — no
+local `~/.claude` config).
+
+**Prerequisites** (why this is optional, not default): the SDK spawns the **Claude
+Code CLI** (`claude`) as its transport, so it needs `pip install claude-agent-sdk`
+*and* the CLI binary, plus an Anthropic API key. That is more setup than the keyless
+Ollama demo requires, so we gate it behind availability checks and fall back cleanly
+(`claude_sdk_agent.can_use_claude_sdk()`).
+
+### 5.3 Why not Pi Coding Agent?
+
+Pi Coding Agent is an excellent local-first *coding* agent, but its loop is a
+standalone CLI/UI oriented around editing a codebase, not an embeddable web-assistant
+request path. The two runtimes above give the evaluator the requested SDK *and* the
+keyless-local path without forcing an awkward CLI embedding.
+
+### 5.4 The trade-off, stated plainly
+
+We accept a small amount of glue code (two runtimes behind one `run(ctx, history)`
+interface) in exchange for satisfying **both** hard constraints: the official
+Claude Agent SDK is genuinely wired in for the Anthropic path, **and** the demo runs
+identically on local Ollama with no keys. The two share `ToolContext`, tools, skills,
+and citations, so behavior is consistent regardless of runtime.
+
+### 5.5 Tools/skills (same across both runtimes)
+
+Each exposes a JSON-schema function definition:
 
 | Tool | Routing intent | Effect |
 |---|---|---|

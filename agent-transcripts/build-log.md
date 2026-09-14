@@ -69,10 +69,33 @@ here may mean lexical-fallback vectors.
 ingestion never duplicates data. Citations are captured during retrieval and
 persisted on the assistant message as JSON.
 
+## Iteration 8 — Optional Claude Agent SDK integration
+
+**Request:** wire in the official Anthropic Claude Agent SDK for the Anthropic path
+(in addition to the built-in loop), and document the trade-off.
+
+**Discovery:** inspecting `claude-agent-sdk` (v0.2.x) showed its transport spawns the
+**Claude Code CLI** (`claude`) as a subprocess, and custom tools are exposed via an
+in-process MCP server (`create_sdk_mcp_server` + `@tool`). So "use the SDK" has three
+prerequisites: the Python package, the CLI binary, and an Anthropic key.
+
+**Design:** added `ClaudeSDKAgent` (same `run(ctx, history)` interface) that exposes
+the existing tools/skills to the SDK as an MCP server, and `select_agent()` that
+picks the runtime via `AGENT_RUNTIME` (`auto`/`claude_sdk`/`builtin`). `auto` checks
+`can_use_claude_sdk()` (importable + CLI on PATH) and falls back to the built-in loop
+so the keyless Ollama demo is unaffected.
+
+**Failure / correction:** an early test tried to monkeypatch `Settings.agent_runtime`
+as a plain class attribute, which pydantic ignores. Corrected to monkeypatch the
+module-level `get_settings` + availability probes directly (see `test_claude_sdk.py`).
+
+**Result:** 29 tests pass; the Claude Agent SDK is genuinely usable on the Anthropic
+path while the demo still runs keyless on Ollama.
+
 ## Verification
 
-- `pytest -q` → **24 passed** (retrieval, chunking, security, ingestion, agent,
-  skills, API validation + graceful LLM failure).
+- `pytest -q` → **29 passed** (retrieval, chunking, security, ingestion, agent,
+  skills, API validation + graceful LLM failure, and agent-runtime selection).
 - Smoke test: server boots, `/health` and `/health/ready` return correct status,
   frontend + static assets serve, all 11 API routes registered in OpenAPI.
 
@@ -81,6 +104,9 @@ persisted on the assistant message as JSON.
 - **No streaming (SSE)** — full-turn responses + typing indicator; streaming is an
   additive change (documented in PRD/architecture).
 - **JSONB vs pgvector** — fine for demo-scale corpus; one-file swap to scale.
+- **Two agent runtimes** (built-in loop + optional Claude Agent SDK) — a small amount
+  of glue in exchange for satisfying both the "use the Claude Agent SDK" requirement
+  and the "run keyless on Ollama" requirement.
 - **Sample transcripts** — clearly-marked `[SAMPLE]` files so the demo runs offline;
   real Lenny transcripts must be ingested by the client (ingestion points at the
   public source).

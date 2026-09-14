@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.agent.agent import Agent
+from app.core.agent.claude_sdk_agent import SDKUnavailableError, select_agent
 from app.core.agent.context import ToolContext
 from app.core.llm.base import ChatMessage, ProviderError
 from app.core.llm.factory import resolve_provider
@@ -65,7 +65,10 @@ async def send_message(
         provider=provider,
         retriever=Retriever(),
     )
-    agent = Agent(provider)
+    try:
+        agent = select_agent(provider)
+    except SDKUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     try:
         result = await agent.run(ctx, history)
     except ProviderError as exc:

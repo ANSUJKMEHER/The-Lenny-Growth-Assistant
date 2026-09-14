@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     llm_provider: Provider = Provider.OLLAMA
     llm_fallback_enabled: bool = True
 
+    # Agent runtime: "auto" (use Claude Agent SDK when the Anthropic provider
+    # is active and the SDK+CLI are installed, else the built-in loop),
+    # "claude_sdk" (require the SDK), or "builtin" (always the built-in loop).
+    agent_runtime: str = "auto"
+    # Optional path to the Claude Code CLI binary used by the Agent SDK.
+    claude_cli_path: str = ""
+
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1"
     ollama_embed_model: str = "nomic-embed-text"

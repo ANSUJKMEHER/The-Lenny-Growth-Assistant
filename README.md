@@ -128,6 +128,8 @@ Every setting is an environment variable with a safe default — see
 |---|---|---|---|
 | `DATABASE_URL` | `postgresql+asyncpg://lenny:lenny@localhost:5432/lenny` | No | PostgreSQL connection string |
 | `LLM_PROVIDER` | `ollama` | No | Default backend (`ollama` / `anthropic` / `openai`) |
+| `AGENT_RUNTIME` | `auto` | No | Agent engine: `auto` / `claude_sdk` / `builtin` |
+| `CLAUDE_CLI_PATH` | *(empty)* | Only for SDK | Path to the Claude Code CLI binary |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | No | Ollama endpoint |
 | `OLLAMA_MODEL` | `llama3.1` | No | Local chat model |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | No | Embedding model |
@@ -154,6 +156,28 @@ curl -X PUT http://localhost:8000/api/config \
 **Fallback behavior** (`LLM_FALLBACK_ENABLED=true`): if the configured provider is
 unconfigured or its healthcheck fails, the app tries `ollama → anthropic → openai`
 and logs the fallback. If none work, the chat endpoint returns a structured `503`.
+
+### Agent runtime (Claude Agent SDK)
+
+Per the brief, the **agent layer** can run on the official **Anthropic Claude Agent
+SDK**. It's wired in as an optional runtime (`AGENT_RUNTIME`):
+
+- `auto` (default) — use the SDK when the Anthropic provider is active **and** the
+  SDK + Claude Code CLI are installed; otherwise use the built-in loop.
+- `claude_sdk` — require the SDK.
+- `builtin` — always use the built-in provider-agnostic loop (used for the keyless
+  Ollama demo).
+
+To enable the SDK path:
+
+```bash
+pip install claude-agent-sdk   # or: pip install ".[anthropic-sdk]"
+npm install -g @anthropic-ai/claude-code   # the CLI the SDK spawns
+# then set ANTHROPIC_API_KEY and LLM_PROVIDER=anthropic
+```
+
+Both runtimes share the same tools/skills and citations, so behavior is consistent.
+See [docs/architecture.md §5](docs/architecture.md) for the full trade-off.
 
 ---
 
