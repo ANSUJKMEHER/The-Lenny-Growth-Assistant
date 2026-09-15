@@ -37,3 +37,11 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.pyright]
+include = ["backend", "tests"]
+extraPaths = ["backend"]
+executionEnvironments = [
+  { root = "backend", extraPaths = ["backend"] },
+  { root = "tests", extraPaths = ["backend"] }
+]
