@@ -23,7 +23,7 @@ import shutil
 from typing import Any
 
 from app.config import get_settings
-from app.core.agent.agent import Agent, AgentResult, SYSTEM_PROMPT, build_default_tools
+from app.core.agent.agent import Agent, AgentResult, SYSTEM_PROMPT, build_default_tools, off_topic_response
 from app.core.agent.context import ToolContext
 from app.core.llm.base import ChatMessage, ProviderError
 
@@ -104,6 +104,13 @@ class ClaudeSDKAgent:
         self.provider = provider  # an AnthropicProvider instance
 
     async def run(self, ctx: ToolContext, history: list[ChatMessage]) -> AgentResult:
+        # Same deterministic scope guard as the built-in loop, so off-topic
+        # code/game requests are refused before the SDK model is invoked.
+        last_user = next((m.content for m in reversed(history) if m.role == "user"), "")
+        refusal = off_topic_response(last_user)
+        if refusal:
+            return AgentResult(content=refusal, grounded=False, tool_trace=[])
+
         from claude_agent_sdk import (  # local import keeps this optional
             AssistantMessage,
             ClaudeAgentOptions,

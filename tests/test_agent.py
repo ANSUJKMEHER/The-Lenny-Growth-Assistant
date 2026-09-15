@@ -131,6 +131,24 @@ def test_off_topic_guard_allows_product_and_growth_questions():
     assert off_topic_response("") is None
 
 
+def test_off_topic_guard_handles_punctuated_variants():
+    """Hyphens/dots/spacing must all be caught (regression for the
+    screenshot where the assistant returned a Tic-Tac-Toe implementation)."""
+    assert off_topic_response("make me a tic-tac-toe game") is not None
+    assert off_topic_response("build tic.tac.toe") is not None
+    assert off_topic_response("rock-paper-scissors in python") is not None
+    assert off_topic_response("guess-the-number game") is not None
+    assert off_topic_response("write a todo app in react.js") is not None
+
+
+def test_off_topic_guard_does_not_false_positive():
+    """Legitimate product/growth and artifact requests must still pass."""
+    assert off_topic_response("How do users react to my onboarding emails?") is None
+    assert off_topic_response("How do I make users come back to the app?") is None
+    assert off_topic_response("Make an HTML onboarding checklist") is None
+    assert off_topic_response("Write a Ship 30 essay on positioning") is None
+
+
 async def test_agent_short_circuits_off_topic_without_calling_model(db):
     provider = FakeProvider([LLMResponse(content="should not be used")])
     ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
@@ -140,3 +158,20 @@ async def test_agent_short_circuits_off_topic_without_calling_model(db):
     assert result.grounded is False
     assert "Lenny Growth Assistant" in result.content
     assert provider.calls == [], "off-topic requests must not invoke the LLM"
+
+
+async def test_agent_refuses_direct_code_answer(db):
+    """Defense in depth: if the model returns a code block directly (no tool
+    use), the agent swaps in the branded refusal instead of surfacing code."""
+    provider = FakeProvider([
+        LLMResponse(
+            content="Here is some code:\n\n```python\nprint('hello')\n```"
+        )
+    ])
+    ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
+    result = await Agent(provider).run(
+        ctx, [ChatMessage(role="user", content="show me an example")]
+    )
+    assert "Lenny Growth Assistant" in result.content
+    assert result.grounded is False
+    assert "print" not in result.content

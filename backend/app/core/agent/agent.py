@@ -65,21 +65,38 @@ STYLE:
 # answer off-topic requests anyway. This catches the most obvious "write code /
 # build a game" requests before the model is invoked, so the assistant reliably
 # stays on-brand and returns instantly instead of generating an off-topic answer.
+def _normalize(text: str) -> str:
+    """Lowercase and collapse every non-alphanumeric run to a single space.
+
+    'tic-tac-toe', 'tic.tac.toe' and 'tic tac toe' then normalise identically,
+    which makes the scope guard robust to punctuation instead of enumerating
+    every hyphen/dot/spacing variant.
+    """
+    return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
+
+
 _GAME_NAMES = re.compile(
-    r"tic\s*tac\s*toe|hangman|snake\s*game|rock\s*paper\s*scissors|sudoku|"
-    r"chess|pong|tetris|minesweeper|wordle|guess\s*the\s*number"
+    r"\b(tic tac toe|hangman|snake game|rock paper scissors|sudoku|chess|pong|"
+    r"tetris|minesweeper|wordle|guess the number|naughts and crosses|"
+    r"connect four|checkers|battleship|blackjack|poker|pacman|breakout|"
+    r"space invaders)\b"
 )
 _OFF_TOPIC_VERBS = re.compile(
     r"\b(write|generate|create|make|code|build|implement|program)\b"
 )
 # Words that unambiguously signal general software/coding work. Deliberately
-# excludes "html"/"css"/"website"/"checklist" because those are legitimate
-# artifact requests handled by generate_artifact.
+# excludes "html"/"css"/"website"/"checklist"/"landing page" because those are
+# legitimate artifact requests handled by generate_artifact.
 _OFF_TOPIC_OBJECTS = re.compile(
-    r"game|\bcode\b|program|script|function|class|algorithm|bot|software|repo|database|"
-    r"python|javascript|java\b|ruby|golang|\brust\b|c\+\+|\bsql\b|react|node\.?js|"
-    r"typescript|fibonacci|binary\s*search|sorting\s*algorithm"
+    r"\b(game|code|program|programming|script|function|class|algorithm|bot|software|"
+    r"repo|database|calculator|puzzle|python|javascript|java|ruby|golang|rust|sql|"
+    r"node js|nodejs|typescript|react js|reactjs|react native|react component|"
+    r"fibonacci|binary search|sorting algorithm)\b"
 )
+
+# A fenced code block (```language) is a strong signal the model produced raw
+# code as a direct answer rather than a grounded response.
+_CODE_FENCE = re.compile(r"```[a-zA-Z0-9+#.\-]*\s*\n")
 
 _REFUSAL = (
     "I'm the **Lenny Growth Assistant** — I answer product and growth questions "
@@ -95,7 +112,7 @@ _REFUSAL = (
 
 def off_topic_response(text: str) -> str | None:
     """Return a polite refusal for clearly out-of-scope requests, else ``None``."""
-    t = (text or "").strip().lower()
+    t = _normalize(text)
     if not t:
         return None
     if _GAME_NAMES.search(t):
@@ -227,6 +244,18 @@ class Agent:
                 continue
 
             content = "".join(text_parts)
+
+            # Defense in depth: if the model answered with a code block directly
+            # (no tool was used), it ignored the scope guard. Swap in the branded
+            # refusal instead of surfacing generated code.
+            if not trace and _CODE_FENCE.search(content):
+                yield AgentEvent(kind="token", data=_REFUSAL)
+                yield AgentEvent(
+                    kind="done",
+                    result=AgentResult(content=_REFUSAL, grounded=False, tool_trace=[]),
+                )
+                return
+
             yield AgentEvent(
                 kind="done",
                 result=AgentResult(
