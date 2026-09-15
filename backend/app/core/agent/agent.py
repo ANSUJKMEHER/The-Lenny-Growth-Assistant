@@ -332,15 +332,15 @@ class Agent:
                 return
 
             # ---- Grounding guarantee --------------------------------------
-            # Local models often answer without searching, or search and then
-            # ignore the passages and produce generic advice. We therefore
-            # (1) retrieve deterministically for any substantive question the
-            # model failed to ground, (2) re-answer on readable (non-JSON)
-            # passages, and (3) fall back to a verbatim, source-tagged answer if
-            # the model still won't cite a source. This makes grounding
-            # independent of the model's tool-calling ability.
-            searched = "search_transcripts" in trace
-            if not searched and not ctx.citations and _is_substantive(last_user):
+            # Local models often answer without searching, search with a
+            # malformed query (so the tool returns no citations), or search and
+            # then ignore the passages and produce generic advice. We therefore
+            # (1) retrieve deterministically whenever this turn has no citations,
+            # (2) re-answer on readable (non-JSON) passages, and (3) fall back to
+            # a verbatim, source-tagged answer if the model still won't cite a
+            # source. This makes grounding independent of the model's tool-calling
+            # ability.
+            if not ctx.citations and _is_substantive(last_user):
                 retrieved = await ctx.retriever.retrieve(
                     ctx.db, last_user, top_k=get_settings().retrieval_top_k
                 )

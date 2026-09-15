@@ -229,3 +229,45 @@ async def test_agent_falls_back_to_grounded_answer_when_model_is_generic(db):
     # The generic answer must be replaced by the source-tagged fallback.
     assert "customer validation" not in result.content
     assert "Fit 101" in result.content
+
+
+async def test_agent_grounds_when_search_tool_call_fails(db):
+    """Regression: a local model can call search_transcripts with a malformed
+    query (so the tool collects no citations) and then answer generically. The
+    agent must still deterministically retrieve and ground the answer instead of
+    letting the generic response escape (the 'query parameter format' screenshot)."""
+    await ingest.ingest_document(db, SAMPLE, title="Fit 101", episode_id="101")
+    await db.commit()
+
+    generic = (
+        "It seems like the search_transcripts function requires a specific format. "
+        "Signs of product-market fit include growth, engagement, and revenue."
+    )
+    provider = FakeProvider(
+        [
+            LLMResponse(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        id="c1",
+                        name="search_transcripts",
+                        arguments={"query": {"nested": "bad"}},
+                    )
+                ],
+            ),
+            LLMResponse(content=generic),  # model gives up and answers generically
+            LLMResponse(content=generic),  # deterministic re-answer is still generic
+        ]
+    )
+    ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
+    result = await Agent(provider).run(
+        ctx,
+        [ChatMessage(role="user", content="How do I know I've found product-market fit?")],
+    )
+
+    assert result.grounded is True
+    assert ctx.citations
+    assert "Fit 101" in result.content
+    # The generic preamble (not the verbatim source) must have been replaced.
+    assert "specific format" not in result.content
+    assert "Signs of product-market fit include" not in result.content

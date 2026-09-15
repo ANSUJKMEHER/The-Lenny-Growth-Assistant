@@ -398,3 +398,26 @@ synthesize generic advice.
   source-tagged answer.
 
 **Result:** 51 tests pass.
+
+## Iteration 16 — Close grounding gap when the search tool call fails
+
+**What:** a fresh screenshot showed the assistant answering "It seems like the
+search_transcripts function requires a specific format for the query parameter…
+signs of PMF include growth, engagement, revenue…" — generic and uncited. Root
+cause: llama3.1 called `search_transcripts` with a malformed `query` (nested
+object / empty), the tool threw, and the model gave up and answered generically.
+The prior grounding logic keyed off `"search_transcripts" in trace`, so a *failed*
+search (invoked but zero citations) skipped deterministic retrieval AND the
+fallback, letting the generic answer through.
+
+**Corrections:**
+- `agent.py` — deterministic retrieval now triggers on `not ctx.citations` (the
+  turn has no retrieved citations) rather than "the tool wasn't invoked", so a
+  failed search is still grounded.
+- `tools.py` — `search_transcripts` now coerces `query` to a plain string (unwraps
+  nested `{query}/{question}/{text}` objects) and `top_k` to an int, returning a
+  graceful message instead of crashing on malformed tool-call arguments.
+- Added regression test: a model that calls search with a malformed query and then
+  answers generically still gets a source-tagged grounded answer.
+
+**Result:** 52 tests pass.

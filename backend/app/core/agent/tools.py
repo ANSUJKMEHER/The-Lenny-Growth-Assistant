@@ -37,7 +37,25 @@ class SearchTranscriptsTool(Tool):
 
     async def run(self, ctx: ToolContext, query: str, top_k: int = 5) -> ToolResult:
         settings = get_settings()
-        top_k = max(1, min(top_k or settings.retrieval_top_k, 10))
+        # Local models occasionally pass the query as a nested object, a non-string
+        # type, or an empty value. Without coercion this crashes the retriever and
+        # surfaces to the model as a confusing "format" error (and an un-grounded
+        # answer). Normalise it so a malformed tool call degrades gracefully.
+        if isinstance(query, dict):
+            query = query.get("query") or query.get("question") or query.get("text") or ""
+        query = str(query or "").strip()
+        if not query:
+            return ToolResult(
+                content=(
+                    "The search query was empty. Ask the user to rephrase their "
+                    "question so I can search the transcripts."
+                )
+            )
+        try:
+            top_k = int(top_k or settings.retrieval_top_k)
+        except (TypeError, ValueError):
+            top_k = settings.retrieval_top_k
+        top_k = max(1, min(top_k, 10))
         results = await ctx.retriever.retrieve(ctx.db, query, top_k=top_k)
 
         if not results:
