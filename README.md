@@ -1,96 +1,117 @@
-# The Lenny Growth Assistant
+<div align="center">
 
-A full-stack, AI-powered conversational assistant grounded in **Lenny's Podcast**
-transcripts. Users ask product & growth questions, get **cited, grounded answers**,
-turn answers into **Ship 30 for 30–style essays**, and generate **Markdown / HTML
-artifacts** that render inside the app — without ever touching prompts, models, or
-infrastructure.
+# 🎙️ The Lenny Growth Assistant
 
-Built for the *Forward Deployed Engineer* take-home assignment. It is a small,
-production-shaped deployment: FastAPI backend, an agent layer with a clean
-tool-calling contract, RAG retrieval, PostgreSQL persistence, a swappable LLM
-backend (local Ollama **or** Anthropic **or** OpenAI), and a Docker Compose
-one-command startup.
+**AI-powered answers grounded in real Lenny's Podcast episodes.**<br/>
+Ask product & growth questions → get **cited, verifiable answers** → generate **essays & artifacts** — all from a single chat interface.
 
----
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React 18](https://img.shields.io/badge/React_18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white)](https://ollama.com/)
 
-## Table of contents
+<br/>
 
-- [What it does](#what-it-does)
-- [Architecture at a glance](#architecture-at-a-glance)
-- [Quick start (Docker Compose)](#quick-start-docker-compose)
-- [Quick start (local, no Docker)](#quick-start-local-no-docker)
-- [Configuration](#configuration)
-- [Model providers & toggling](#model-providers--toggling)
-- [Ingesting transcripts](#ingesting-transcripts)
-- [Running tests](#running-tests)
-- [Project structure](#project-structure)
-- [API reference](#api-reference)
-- [Security model](#security-model)
-- [Troubleshooting](#troubleshooting)
-- [Extending the system](#extending-the-system)
-- [Deliverables index](#deliverables-index)
+> *Built for the **Forward Deployed Engineer** take-home assignment.*<br/>
+> *Production-shaped: FastAPI · Agent loop · RAG · PostgreSQL · Swappable LLM (Ollama / Anthropic / OpenAI) · Docker Compose one-command startup.*
+
+</div>
 
 ---
 
-## What it does
+## ✨ Features
 
-| Capability | Details |
-|---|---|
-| **Grounded chat** | RAG over **real Lenny's Podcast transcripts** (auto-fetched from the official public dataset on first boot). Answers cite the guest + episode + timestamp; the assistant admits when the corpus doesn't support an answer instead of hallucinating. A scope guard keeps it on-topic (declines code/game/general-software requests with a helpful redirect). |
-| **Streaming** | Real Server-Sent Events (SSE) token streaming with progress statuses ("Searching transcripts…") and a non-streaming fallback. The chat is fully scrollable and each response ships with a copy button. |
-| **Sessions** | Independent chat sessions with full history persisted in PostgreSQL. |
-| **Ship 30 for 30 skill** | A dedicated, encoded skill that turns grounded material into a ~1,250-word skimmable essay (hook, narrative arc, headings/bullets/bold, concrete takeaway) with length enforcement. |
-| **Artifact generation** | Produce Markdown documents or complete HTML/CSS snippets, rendered in a side-by-side **Artifact Viewer** with copy / download / open-in-new-tab. |
-| **Flexible LLM config** | Switch between Ollama (local, keyless — the demo default), Anthropic, and OpenAI from the UI or API. No code changes. |
-| **Operability** | Structured logs, health/readiness endpoints, graceful degradation, `.env.example` with safe defaults, Docker Compose + `run.sh`. |
+<table>
+<tr>
+<td width="50%">
 
-## Architecture at a glance
+### 🔍 Grounded Chat
+RAG over **real Lenny's Podcast transcripts** auto-fetched on first boot. Answers cite the **guest + episode + timestamp**. The assistant admits when the corpus doesn't cover a topic instead of hallucinating. A scope guard keeps it on-topic.
+
+</td>
+<td width="50%">
+
+### ⚡ Real-Time Streaming
+Server-Sent Events (SSE) with live token streaming and progress indicators (*"Searching transcripts…"*). Copy button on every response. Non-streaming fallback included.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 📝 Ship 30 for 30 Skill
+Turn grounded material into a **~1,250-word skimmable essay** — hook, narrative arc, headings, bullets, bold takeaways — with encoded writing principles and length enforcement.
+
+</td>
+<td width="50%">
+
+### 🎨 Artifact Generation
+Produce **Markdown documents** or complete **HTML/CSS snippets**, rendered in a side-by-side **Artifact Viewer** with copy · download · open-in-new-tab.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🔄 Flexible LLM Config
+Switch between **Ollama** (local, keyless), **Anthropic**, and **OpenAI** from the UI or API — no code changes, no restarts. Auto-fallback between providers when one is unreachable.
+
+</td>
+<td width="50%">
+
+### 🛡️ Production-Shaped
+Structured logs · health/readiness probes · graceful degradation · sanitized HTML rendering (server-side `nh3` + client-side `<iframe sandbox>`) · `.env.example` with safe defaults · Docker Compose + `run.sh`.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🏗️ Architecture
 
 ```
-Browser (React + TypeScript SPA)
-   │  REST (JSON)
+Browser (React 18 + TypeScript SPA)
+   │  REST (JSON) + SSE
    ▼
 FastAPI ──▶ API routers (sessions · chat · config · ingest · artifacts)
    │              │
    │              ▼
    │        Agent (tool-calling loop)
-   │              ├── search_transcripts ──▶ Retriever (embedding or BM25) ──▶ PostgreSQL
+   │              ├── search_transcripts ──▶ Retriever (embedding + BM25) ──▶ PostgreSQL
    │              ├── write_ship30_essay ──▶ LLM (grounded) + artifact
    │              └── generate_artifact ──▶ LLM + sanitize + artifact
    │
-   ├──▶ LLM layer (Ollama | Anthropic | OpenAI)  ← provider-agnostic interface
+   ├──▶ LLM layer (Ollama │ Anthropic │ OpenAI)  ← provider-agnostic interface
    └──▶ PostgreSQL (conversations, messages, artifacts, sources, chunks)
 ```
 
-Full details, DB schema, endpoint contracts, and the agent-routing design are in
-[docs/architecture.md](docs/architecture.md).
+> 📖 Full details, DB schema, endpoint contracts, and agent-routing design in [**docs/architecture.md**](docs/architecture.md).
 
 ---
 
-## Quick start
+## 🚀 Quick Start
 
-**One command (recommended):**
+### One Command (Recommended)
 
 ```bash
 ./run.sh
 ```
 
-`run.sh` starts Ollama (pulling `qwen2.5:7b` + `nomic-embed-text` if needed), creates
-`.env` from `.env.example`, and boots the stack with Docker Compose (or a local
-fallback). On first boot the app also auto-fetches a **starter set of real Lenny's
-Podcast episodes** so answers are grounded in real content (the full pack is one
-`POST /api/ingest/fetch` away).
+> `run.sh` starts Ollama (pulling `qwen2.5:7b` + `nomic-embed-text` if needed), creates `.env` from `.env.example`, and boots the stack with Docker Compose. On first boot the app auto-fetches a **starter set of real Lenny's Podcast episodes** so answers are grounded in real content.
 
-### Quick start (Docker Compose)
+<details>
+<summary><strong>🐳 Docker Compose (step-by-step)</strong></summary>
 
-Prerequisites: **Docker** + **Docker Compose**, and **Ollama** running on your host
-with a model pulled (the demo requires local Ollama).
+**Prerequisites:** Docker + Docker Compose, and **Ollama** running on your host.
 
 ```bash
 # 1. Install + start Ollama (https://ollama.com), then pull models:
 ollama pull qwen2.5:7b              # chat model (or any model you prefer)
-ollama pull nomic-embed-text      # embeddings for RAG
+ollama pull nomic-embed-text        # embeddings for RAG
 
 # 2. Clone and start the stack
 git clone <your-repo-url> && cd lenny-growth-assistant
@@ -101,16 +122,16 @@ docker compose up --build -d
 open http://localhost:8000
 ```
 
-The API **auto-fetches a starter set of real Lenny's Podcast transcripts** on first
-start (see [Ingesting transcripts](#ingesting-transcripts)), so the demo works
-end-to-end immediately with genuine grounding. If the network is unavailable, it
-falls back to the bundled clearly-marked `[SAMPLE]` transcripts.
+The API **auto-fetches real transcripts** on first start. If the network is unavailable, it falls back to the bundled `[SAMPLE]` transcripts.
 
 > **macOS / Windows note:** Docker can't reach `localhost` for Ollama directly.
 > Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in `.env` (the Compose
 > file already maps `host.docker.internal`). On Linux, `localhost` works as-is.
 
-## Quick start (local, no Docker)
+</details>
+
+<details>
+<summary><strong>💻 Local (no Docker)</strong></summary>
 
 ```bash
 # 1. Python 3.11+
@@ -133,33 +154,36 @@ uvicorn app.main:app --reload
 
 Open http://localhost:8000. `make run` is a convenience wrapper.
 
+</details>
+
 ---
 
-## Configuration
+## ⚙️ Configuration
 
-Every setting is an environment variable with a safe default — see
-[`.env.example`](.env.example) for the full annotated list. The important ones:
+Every setting is an environment variable with a safe default — see [`.env.example`](.env.example) for the full annotated list.
 
 | Variable | Default | Required? | Purpose |
-|---|---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://lenny:lenny@localhost:5432/lenny` | No | PostgreSQL connection string |
-| `LLM_PROVIDER` | `ollama` | No | Default backend (`ollama` / `anthropic` / `openai`) |
-| `AGENT_RUNTIME` | `auto` | No | Agent engine: `auto` / `claude_sdk` / `builtin` |
-| `CLAUDE_CLI_PATH` | *(empty)* | Only for SDK | Path to the Claude Code CLI binary |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | No | Ollama endpoint |
-| `OLLAMA_MODEL` | `qwen2.5:7b` | No | Local chat model |
-| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | No | Embedding model |
-| `ANTHROPIC_API_KEY` | *(empty)* | Only for Anthropic | Cloud API key |
-| `OPENAI_API_KEY` | *(empty)* | Only for OpenAI | Cloud API key |
-| `LLM_FALLBACK_ENABLED` | `true` | No | Auto-fallback between providers |
-| `RETRIEVAL_TOP_K` | `6` | No | Chunks returned per search |
+|:--|:--|:--:|:--|
+| `DATABASE_URL` | `postgresql+asyncpg://lenny:lenny@localhost:5432/lenny` | — | PostgreSQL connection string |
+| `LLM_PROVIDER` | `ollama` | — | Default backend (`ollama` / `anthropic` / `openai`) |
+| `AGENT_RUNTIME` | `auto` | — | Agent engine: `auto` / `claude_sdk` / `builtin` |
+| `CLAUDE_CLI_PATH` | *(empty)* | SDK only | Path to the Claude Code CLI binary |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | — | Ollama endpoint |
+| `OLLAMA_MODEL` | `qwen2.5:7b` | — | Local chat model |
+| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | — | Embedding model |
+| `ANTHROPIC_API_KEY` | *(empty)* | Anthropic only | Cloud API key |
+| `OPENAI_API_KEY` | *(empty)* | OpenAI only | Cloud API key |
+| `LLM_FALLBACK_ENABLED` | `true` | — | Auto-fallback between providers |
+| `RETRIEVAL_TOP_K` | `6` | — | Chunks returned per search |
 
-**Never commit secrets.** `.env` is git-ignored; `.env.example` contains no keys.
+> [!IMPORTANT]
+> **Never commit secrets.** `.env` is git-ignored; `.env.example` contains no keys.
 
-## Model providers & toggling
+---
 
-The active provider is **visible in the UI** (sidebar button + header badge) and
-switchable at runtime:
+## 🔀 Model Providers & Toggling
+
+The active provider is **visible in the UI** (sidebar button + header badge) and switchable at runtime:
 
 - **UI** — click the provider button in the sidebar, choose a provider.
 - **API** — `PUT /api/config` with `{"provider": "ollama"}`.
@@ -169,20 +193,16 @@ curl -X PUT http://localhost:8000/api/config \
   -H 'Content-Type: application/json' -d '{"provider":"anthropic"}'
 ```
 
-**Fallback behavior** (`LLM_FALLBACK_ENABLED=true`): if the configured provider is
-unconfigured or its healthcheck fails, the app tries `ollama → anthropic → openai`
-and logs the fallback. If none work, the chat endpoint returns a structured `503`.
+**Fallback behavior** (`LLM_FALLBACK_ENABLED=true`): if the configured provider is unconfigured or its healthcheck fails, the app tries `ollama → anthropic → openai` and logs the fallback. If none work, the chat endpoint returns a structured `503`.
 
-### Agent runtime (Claude Agent SDK)
+<details>
+<summary><strong>🤖 Agent Runtime (Claude Agent SDK)</strong></summary>
 
-Per the brief, the **agent layer** can run on the official **Anthropic Claude Agent
-SDK**. It's wired in as an optional runtime (`AGENT_RUNTIME`):
+Per the brief, the **agent layer** can run on the official **Anthropic Claude Agent SDK**. It's wired in as an optional runtime (`AGENT_RUNTIME`):
 
-- `auto` (default) — use the SDK when the Anthropic provider is active **and** the
-  SDK + Claude Code CLI are installed; otherwise use the built-in loop.
+- `auto` (default) — use the SDK when the Anthropic provider is active **and** the SDK + Claude Code CLI are installed; otherwise use the built-in loop.
 - `claude_sdk` — require the SDK.
-- `builtin` — always use the built-in provider-agnostic loop (used for the keyless
-  Ollama demo).
+- `builtin` — always use the built-in provider-agnostic loop (used for the keyless Ollama demo).
 
 To enable the SDK path:
 
@@ -192,20 +212,17 @@ npm install -g @anthropic-ai/claude-code   # the CLI the SDK spawns
 # then set ANTHROPIC_API_KEY and LLM_PROVIDER=anthropic
 ```
 
-Both runtimes share the same tools/skills and citations, so behavior is consistent.
-See [docs/architecture.md §5](docs/architecture.md) for the full trade-off.
+Both runtimes share the same tools/skills and citations, so behavior is consistent. See [docs/architecture.md §5](docs/architecture.md) for the full trade-off.
+
+</details>
 
 ---
 
-## Ingesting transcripts
+## 📚 Ingesting Transcripts
 
-The knowledge base is **auto-populated on first boot** with a starter set of the
-official Lenny's Podcast dataset (10 real episodes; the full archive — ~300 episodes — is
-available via `POST /api/ingest/fetch`. Source:
-[`ChatPRD/lennys-podcast-transcripts`](https://github.com/ChatPRD/lennys-podcast-transcripts),
-used under its personal/non-commercial license). Transcripts are fetched at
-runtime rather than committed, chunked (with speaker + timestamp preserved), and
-indexed with source metadata.
+The knowledge base is **auto-populated on first boot** with a starter set of the official Lenny's Podcast dataset (10 real episodes; the full archive — ~300 episodes — is available via `POST /api/ingest/fetch`). Source: [`ChatPRD/lennys-podcast-transcripts`](https://github.com/ChatPRD/lennys-podcast-transcripts), used under its personal/non-commercial license.
+
+Transcripts are fetched at runtime rather than committed, chunked (with speaker + timestamp preserved), and indexed with source metadata.
 
 ```bash
 # Fetch + ingest the official transcript archive on demand:
@@ -225,78 +242,80 @@ curl -X POST http://localhost:8000/api/ingest/url \
 curl http://localhost:8000/api/sources
 ```
 
-Answers are **traced back to their source** — citations include the episode
-title, guest, timestamp, a source link, and the retrieved excerpt.
+> Citations include the episode title, guest, timestamp, a source link, and the retrieved excerpt.
 
 ---
 
-## Running tests
+## 🧪 Running Tests
 
 ```bash
 pip install -r requirements.txt
 pytest -q            # or: make test
 ```
 
-The suite runs against **SQLite** (no PostgreSQL/Ollama needed) and exercises the
-critical paths: retrieval, chunking, sanitization, ingestion idempotency, agent
-routing/skills, and the API (sessions, validation, graceful LLM failure). See
-[docs/manual-test-plan.md](docs/manual-test-plan.md) for the UI test plan.
+The suite runs against **SQLite** (no PostgreSQL/Ollama needed) and exercises the critical paths: retrieval, chunking, sanitization, ingestion idempotency, agent routing/skills, and the API (sessions, validation, graceful LLM failure).
+
+> 📋 See [**docs/manual-test-plan.md**](docs/manual-test-plan.md) for the UI test plan.
 
 ---
 
-## Project structure
+## 📁 Project Structure
 
 ```
 lenny-growth-assistant/
-├── README.md                 # this file
-├── PRD.md                    # product requirements & discovery brief
-├── .env.example              # annotated configuration template
-├── docker-compose.yml        # Postgres + API one-command stack
+├── README.md                    ← you are here
+├── PRD.md                       # product requirements & discovery brief
+├── .env.example                 # annotated configuration template
+├── docker-compose.yml           # Postgres + API one-command stack
 ├── Dockerfile
 ├── Makefile
 ├── requirements.txt
 ├── pyproject.toml
+│
 ├── docs/
-│   ├── architecture.md       # schema, endpoints, flows, security, topology
-│   ├── design.md             # UI/UX principles & decisions
-│   ├── manual-test-plan.md   # UI test script
-│   └── demo-video-script.md  # 2–3 min video outline
+│   ├── architecture.md          # schema, endpoints, flows, security, topology
+│   ├── design.md                # UI/UX principles & decisions
+│   ├── manual-test-plan.md      # UI test script
+│   └── demo-video-script.md     # 2–3 min video outline
+│
 ├── agent-transcripts/
-│   └── build-log.md          # coding-agent logs incl. failed attempts & fixes
+│   └── build-log.md             # coding-agent logs incl. failed attempts & fixes
+│
 ├── backend/
 │   ├── app/
-│   │   ├── main.py           # FastAPI entrypoint, middleware, logging
-│   │   ├── config.py         # typed settings from env
-│   │   ├── db.py             # async engine/session, init
-│   │   ├── models.py         # SQLAlchemy ORM models
-│   │   ├── schemas.py        # Pydantic request/response contracts
-│   │   ├── api/              # health, sessions, chat, config, ingest, artifacts
+│   │   ├── main.py              # FastAPI entrypoint, middleware, logging
+│   │   ├── config.py            # typed settings from env
+│   │   ├── db.py                # async engine/session, init
+│   │   ├── models.py            # SQLAlchemy ORM models
+│   │   ├── schemas.py           # Pydantic request/response contracts
+│   │   ├── api/                 # health, sessions, chat, config, ingest, artifacts
 │   │   ├── core/
-│   │   │   ├── llm/          # provider-agnostic LLM (ollama/anthropic/openai)
-│   │   │   ├── agent/        # tool-calling loop + tools + skills
-│   │   │   └── rag/          # chunker, embedder, retriever, ingest
-│   │   └── static/           # built React SPA (Vite output, served by FastAPI)
-│   └── data/transcripts/     # transcript files + README (SAMPLE data)
-├── frontend/                 # React + TypeScript + Vite source (build → static/)
-└── tests/                    # pytest suite
+│   │   │   ├── llm/             # provider-agnostic LLM (ollama/anthropic/openai)
+│   │   │   ├── agent/           # tool-calling loop + tools + skills
+│   │   │   └── rag/             # chunker, embedder, retriever, ingest
+│   │   └── static/              # built React SPA (Vite output, served by FastAPI)
+│   └── data/transcripts/        # transcript files + README (SAMPLE data)
+│
+├── frontend/                    # React + TypeScript + Vite source (build → static/)
+└── tests/                       # pytest suite (56 backend + 6 frontend)
 ```
 
 ---
 
-## API reference
+## 📡 API Reference
 
-Interactive docs are served at `/docs` (Swagger) and `/redoc`.
+> Interactive docs are served at **`/docs`** (Swagger) and **`/redoc`**.
 
-| Method & path | Purpose |
-|---|---|
-| `GET /health`, `GET /health/ready` | Liveness / readiness (DB + LLM) |
+| Method & Path | Purpose |
+|:--|:--|
+| `GET /health` · `GET /health/ready` | Liveness / readiness (DB + LLM) |
 | `POST /api/sessions` | Create a chat session |
 | `GET /api/sessions` | List sessions |
 | `GET /api/sessions/{id}` | Session detail (messages + artifacts) |
 | `DELETE /api/sessions/{id}` | Delete a session |
 | `POST /api/sessions/{id}/messages` | Send a message → run the agent |
-| `POST /api/sessions/{id}/messages/stream` | Same, but **SSE streaming** (`token`/`status`/`done`/`error` events) |
-| `GET /api/config`, `PUT /api/config` | Read / switch model provider |
+| `POST /api/sessions/{id}/messages/stream` | Same, but **SSE streaming** (`token`/`status`/`done`/`error`) |
+| `GET /api/config` · `PUT /api/config` | Read / switch model provider |
 | `POST /api/ingest/fetch` | Fetch + ingest the official Lenny's Podcast dataset |
 | `POST /api/ingest/seed` | Ingest bundled samples |
 | `POST /api/ingest` | Ingest `data/transcripts/*` |
@@ -304,65 +323,67 @@ Interactive docs are served at `/docs` (Swagger) and `/redoc`.
 | `GET /api/sources` | List indexed transcript sources |
 | `GET /api/artifacts/{id}` | Fetch an artifact |
 
-Unexpected (500) errors use the `{"error": "...", "detail": ...}` envelope; validation
-errors return `422` with FastAPI's `detail` shape, and missing resources return
-`404`. LLM/provider failures return `502`/`503` with a human-readable `detail`.
+**Error responses:** `422` (validation), `404` (not found), `502`/`503` (LLM/provider failure) — all use the `{"error": "...", "detail": ...}` envelope.
 
 ---
 
-## Security model
+## 🔒 Security Model
 
-- **Secrets** are never committed; keys are read from environment only.
-- **Generated HTML is untrusted.** It is sanitized server-side with `nh3` (allowlist
-  tags/attributes, safe URL schemes only, scripts/event-handlers stripped) **and**
-  rendered client-side inside a `<iframe sandbox>` (no `allow-same-origin`, no
-  `allow-scripts`) for defense in depth.
-- **Markdown** is converted to HTML then passed through the same sanitizer.
-- **Grounding** prevents fabrication: the agent is instructed to answer only from
-  retrieved passages and to acknowledge unsupported questions.
+| Layer | Protection |
+|:--|:--|
+| **Secrets** | Never committed; read from environment only. `.env` is git-ignored. |
+| **Generated HTML** | Sanitized server-side with `nh3` (allowlist tags/attributes, safe URL schemes, scripts stripped) **and** rendered in `<iframe sandbox>` (no `allow-same-origin`, no `allow-scripts`) for defense in depth. |
+| **Markdown** | Converted to HTML then passed through the same sanitizer. |
+| **Grounding** | Agent instructed to answer only from retrieved passages; acknowledges unsupported questions. |
 
-See [docs/architecture.md § Security](docs/architecture.md) for what the viewer
-permits, blocks, and why.
+> 📖 See [**docs/architecture.md § Security**](docs/architecture.md) for what the viewer permits, blocks, and why.
 
 ---
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
+| Symptom | Likely Cause | Fix |
+|:--|:--|:--|
 | `503 No LLM provider available` | Ollama not running / model not pulled | `ollama serve`, then `ollama pull qwen2.5:7b` |
-| Answers not grounded / "knowledge base doesn't cover it" | No transcripts ingested | `POST /api/ingest/seed` or `/api/ingest` |
-| Embeddings slow or falling back to lexical | `nomic-embed-text` not pulled | `ollama pull nomic-embed-text` |
+| Answers not grounded | No transcripts ingested | `POST /api/ingest/seed` or `/api/ingest` |
+| Embeddings slow / lexical fallback | `nomic-embed-text` not pulled | `ollama pull nomic-embed-text` |
 | `connection refused` on DB | Postgres not up | `docker compose up -d db`, check `DATABASE_URL` |
 | Anthropic/OpenAI `401` | Key missing | Set the right API key in `.env` |
-| Docker can't reach Ollama (macOS/Win) | Host networking | Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` |
+| Docker can't reach Ollama | Host networking (macOS/Win) | Set `OLLAMA_BASE_URL=http://host.docker.internal:11434` |
 
-Diagnostics: `GET /health/ready` reports DB + LLM status; logs are structured
-`key=value` lines (see `docker compose logs -f api`).
-
----
-
-## Extending the system
-
-- **Add a provider** — subclass `core/llm/base.py::LLMProvider`, register in
-  `core/llm/factory.py::build_provider`.
-- **Add a skill** — subclass `core/agent/tool.py::Tool` with a `name` /
-  `description` / `parameters`, implement `run()`, and add it to
-  `core/agent/agent.py::build_default_tools`. The router discovers it automatically.
-- **Add transcript sources** — drop files in `backend/data/transcripts/` or extend
-  `core/rag/ingest.py` with a new fetcher.
+> **Diagnostics:** `GET /health/ready` reports DB + LLM status; logs are structured `key=value` lines (`docker compose logs -f api`).
 
 ---
 
-## Deliverables index
+## 🧩 Extending the System
 
-| # | Deliverable | Location |
-|---|---|---|
-| 1 | Public repository | *(this repo)* |
-| 2 | README | `README.md` |
-| 3 | PRD | `PRD.md` |
-| 4 | Design | `docs/design.md` |
-| 5 | Architecture | `docs/architecture.md` |
-| 6 | Agent transcripts | `agent-transcripts/build-log.md` |
-| 7 | Tests | `tests/` + `docs/manual-test-plan.md` |
-| 8 | Demo video | `docs/demo-video-script.md` (script to record) |
+| What | How |
+|:--|:--|
+| **Add a provider** | Subclass `core/llm/base.py::LLMProvider`, register in `core/llm/factory.py::build_provider`. |
+| **Add a skill** | Subclass `core/agent/tool.py::Tool` with `name` / `description` / `parameters`, implement `run()`, add to `core/agent/agent.py::build_default_tools`. Auto-discovered. |
+| **Add transcript sources** | Drop files in `backend/data/transcripts/` or extend `core/rag/ingest.py` with a new fetcher. |
+
+---
+
+## 📦 Deliverables Index
+
+| # | Deliverable | Location | Status |
+|:--:|:--|:--|:--:|
+| 1 | Public repository | *(this repo)* | ✅ |
+| 2 | README | `README.md` | ✅ |
+| 3 | PRD | `PRD.md` | ✅ |
+| 4 | Design | `docs/design.md` | ✅ |
+| 5 | Architecture | `docs/architecture.md` | ✅ |
+| 6 | Agent transcripts | `agent-transcripts/build-log.md` | ✅ |
+| 7 | Tests | `tests/` + `docs/manual-test-plan.md` | ✅ |
+| 8 | Demo video | `docs/demo-video-script.md` *(script)* | 🎬 |
+
+---
+
+<div align="center">
+
+**Built with ❤️ for the Forward Deployed Engineer take-home.**
+
+*[Architecture](docs/architecture.md) · [Design](docs/design.md) · [PRD](PRD.md) · [Manual Tests](docs/manual-test-plan.md) · [Demo Script](docs/demo-video-script.md)*
+
+</div>
