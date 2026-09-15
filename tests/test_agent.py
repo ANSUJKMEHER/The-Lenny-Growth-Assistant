@@ -271,3 +271,35 @@ async def test_agent_grounds_when_search_tool_call_fails(db):
     # The generic preamble (not the verbatim source) must have been replaced.
     assert "specific format" not in result.content
     assert "Signs of product-market fit include" not in result.content
+
+
+async def test_agent_does_not_fallback_when_model_cites_speaker(db):
+    """Regression: the fallback must not replace a good answer that cites the
+    source by guest name (a common citation form) instead of a [n] marker."""
+    await ingest.ingest_document(
+        db,
+        SAMPLE,
+        title="When to invest in new channels | Adam Grenier",
+        episode_id="adam-grenier",
+        speaker="Adam Grenier",
+    )
+    await db.commit()
+
+    good = "Adam Grenier advises assuming you no longer have product-market fit."
+    provider = FakeProvider(
+        [
+            LLMResponse(content="Product-market fit is important."),  # no search
+            LLMResponse(content=good),  # deterministic re-answer, cited by guest name
+        ]
+    )
+    ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
+    result = await Agent(provider).run(
+        ctx,
+        [ChatMessage(role="user", content="What does Lenny say about product-market fit?")],
+    )
+
+    assert result.grounded is True
+    assert ctx.citations
+    # The speaker-cited answer must be kept, not replaced by the verbatim fallback.
+    assert result.content == good
+    assert "Here's what Lenny's Podcast says" not in result.content

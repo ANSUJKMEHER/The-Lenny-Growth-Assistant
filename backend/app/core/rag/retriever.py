@@ -151,7 +151,9 @@ class Retriever:
             chunk_index=chunk.index,
             score=round(float(score), 4),
             method=method,
-            speaker=chunk.speaker,
+            # Prefer the chunk's per-turn speaker; fall back to the source's guest
+            # name so plain-prose transcripts still carry a citable speaker.
+            speaker=chunk.speaker or source.speaker,
             timestamp=chunk.timestamp,
             url=source.url,
         )

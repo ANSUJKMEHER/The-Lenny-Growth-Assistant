@@ -421,3 +421,23 @@ fallback, letting the generic answer through.
   answers generically still gets a source-tagged grounded answer.
 
 **Result:** 52 tests pass.
+
+## Iteration 17 — Stop the fallback from replacing good qwen answers
+
+**What:** after switching to qwen2.5, a PMF + positioning question returned the
+verbatim fallback ("Here's what Lenny's Podcast says…") instead of the model's
+synthesis, and two of the three quoted chunks were off-topic. Root cause: the
+grounding check only recognized `[n]` markers and the full title string, so a
+legitimate citation by guest name / short title was treated as un-grounded and
+the good answer was replaced.
+
+**Corrections:**
+- `agent.py` — `_mentions_source` now also accepts the title's topic portion
+  ("X | Guest") and the guest/speaker name (excluding the host "Lenny", which
+  appears in the question itself); the verbatim fallback now quotes the top-2
+  chunks instead of 3 (drops trailing intro boilerplate).
+- `retriever.py` — `RetrievedChunk.speaker` falls back to the source's guest name
+  when a chunk has no per-turn speaker (plain-prose transcripts).
+- Added regression test: a speaker-cited answer is kept, not replaced.
+
+**Result:** 53 tests pass.

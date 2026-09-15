@@ -159,8 +159,23 @@ def _title_signature(title: str | None) -> str:
     return _normalize(cleaned)
 
 
+def _title_topic(title: str | None) -> str:
+    """Normalized topic portion of a title (the part before ``| Guest``)."""
+    raw = re.sub(r"\[[^\]]*\]", " ", title or "")
+    return _normalize(raw.split("|")[0])
+
+
+# The host's own name is not a meaningful citation signal (the question itself
+# usually says "Lenny"), so we don't treat it as a source reference.
+_HOST_NAMES = {"lenny", "lenny rachitsky", "lenny rachitsky podcast"}
+
+
 def _mentions_source(content: str, citations) -> bool:
-    """True if ``content`` references at least one retrieved source."""
+    """True if ``content`` references at least one retrieved source.
+
+    Accepts the citation forms a model actually uses: a ``[n]`` marker, the
+    episode title or its topic portion, or the guest/speaker name.
+    """
     if not content:
         return False
     for i in range(1, len(citations) + 1):
@@ -168,8 +183,12 @@ def _mentions_source(content: str, citations) -> bool:
             return True
     norm = _normalize(content)
     for c in citations:
-        sig = _title_signature(getattr(c, "title", None))
-        if sig and sig in norm:
+        title = getattr(c, "title", None)
+        for probe in (_title_signature(title), _title_topic(title)):
+            if probe and probe in norm:
+                return True
+        speaker = _normalize(getattr(c, "speaker", None) or "")
+        if speaker and speaker not in _HOST_NAMES and speaker in norm:
             return True
     return False
 
@@ -178,7 +197,7 @@ def _build_grounded_answer(results) -> str:
     """Deterministic, verbatim, source-tagged answer used when the model's
     synthesis is generic or otherwise fails to cite the retrieved material."""
     lines = ["Here's what Lenny's Podcast says about that:\n"]
-    for r in results[:3]:
+    for r in results[:2]:
         src = r.title or "Lenny's Podcast"
         if getattr(r, "episode_id", None):
             src += f" (episode {r.episode_id})"
