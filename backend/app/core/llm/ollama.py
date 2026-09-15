@@ -181,11 +181,13 @@ class OllamaProvider(LLMProvider):
         """Preload the model with a single-token generation.
 
         Unlike :meth:`healthcheck` (capped at 20s so per-request probes stay
-        cheap), this uses the full timeout so a cold model load can finish.
-        Called once at startup so the first chat message is not slow.
+        cheap), this uses a longer timeout so a cold model load can finish.
+        Called once at startup so the first chat message is not slow. The
+        timeout is capped so a slow/hung model can never delay boot by the
+        full request timeout.
         """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=min(self.timeout, 60.0)) as client:
                 resp = await client.post(
                     f"{self.base_url}/api/chat",
                     json={
