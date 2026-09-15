@@ -108,11 +108,12 @@ transcript (official fetch / local file / URL)
 
 **Official dataset:** on first boot the app fetches a **starter set of 10 real
 episodes** from the public
-[`LennysNewsletter/lennys-newsletterpodcastdata`](https://github.com/LennysNewsletter/lennys-newsletterpodcastdata)
-starter pack (personal/non-commercial license) and ingests them; `POST
-/api/ingest/fetch` ingests the **full pack (~50 episodes)**. Raw files are
-fetched at runtime, never committed. If the network is unavailable the app falls
-back to the bundled sample transcripts.
+[`ChatPRD/lennys-podcast-transcripts`](https://github.com/ChatPRD/lennys-podcast-transcripts)
+archive (personal/non-commercial license) and ingests them; `POST
+/api/ingest/fetch` ingests the **full archive (~300 episodes)**. The episode tree
+is enumerated via the GitHub Git-Trees API and each `episodes/<slug>/transcript.md`
+is fetched from `raw.githubusercontent.com` at runtime, never committed. If the
+network is unavailable the app falls back to the bundled sample transcripts.
 
 **Retrieval** (`Retriever.retrieve`):
 1. Load all chunks + source metadata.

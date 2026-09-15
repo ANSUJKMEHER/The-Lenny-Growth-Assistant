@@ -200,9 +200,9 @@ See [docs/architecture.md §5](docs/architecture.md) for the full trade-off.
 ## Ingesting transcripts
 
 The knowledge base is **auto-populated on first boot** with a starter set of the
-official Lenny's Podcast dataset (10 real episodes; the full pack — ~50 episodes — is
+official Lenny's Podcast dataset (10 real episodes; the full archive — ~300 episodes — is
 available via `POST /api/ingest/fetch`. Source:
-[`LennysNewsletter/lennys-newsletterpodcastdata`](https://github.com/LennysNewsletter/lennys-newsletterpodcastdata),
+[`ChatPRD/lennys-podcast-transcripts`](https://github.com/ChatPRD/lennys-podcast-transcripts),
 used under its personal/non-commercial license). Transcripts are fetched at
 runtime rather than committed, chunked (with speaker + timestamp preserved), and
 indexed with source metadata.

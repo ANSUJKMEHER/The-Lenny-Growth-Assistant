@@ -123,9 +123,9 @@ loss on slow local models), and (4) no one-command bootstrap.
 
 **Corrections:**
 - **Real corpus** — added `core/rag/fetch.py`, which fetches the official
-  `LennysNewsletter/lennys-newsletterpodcastdata` starter pack (50 real episodes)
-  at runtime and ingests it (idempotent, raw files never committed). `ensure_corpus`
-  runs on first boot, falling back to the bundled samples offline.
+  `ChatPRD/lennys-podcast-transcripts` archive at runtime and ingests it
+  (idempotent, raw files never committed). `ensure_corpus` runs on first boot,
+  falling back to the bundled samples offline.
 - **Speaker/timestamp chunking** — added `chunk_speaker_turns()` + `parse_speaker_turns()`
   so speaker-labelled transcripts are chunked with per-chunk `speaker` + `timestamp`
   metadata (new `Chunk` columns). Citations now carry guest + timestamp + source URL.
@@ -231,3 +231,43 @@ stack/documentation mismatch and two real defects.
 - **Sample transcripts** — clearly-marked `[SAMPLE]` files so the demo runs offline;
   real Lenny transcripts must be ingested by the client (ingestion points at the
   public source).
+
+## Iteration 11 — Corrected transcript data source and parser format
+
+**What:** a review flagged that §3.3 of the assignment doc links the knowledge
+base to [`ChatPRD/lennys-podcast-transcripts`](https://github.com/ChatPRD/lennys-podcast-transcripts),
+but `fetch.py` was pulling from a *different* repo
+(`LennysNewsletter/lennys-newsletterpodcastdata`) via an `index.json`. The correct
+archive has no `index.json` and a different transcript format, so two coupled bugs
+were introduced together:
+
+1. **Wrong source** — `fetch.py` depended on `index.json` + a `podcasts/` filename
+   convention that only exist in the wrong repo.
+2. **Parser mismatch** — `chunker.py`'s `_TURN_LABEL_RE` only matched the
+   `**Speaker** (HH:MM:SS):` bold-Markdown format. The ChatPRD archive uses
+   `Speaker (HH:MM:SS):` for named turns and `(HH:MM:SS):` for timestamp-only
+   continuations of the same speaker. The old regex matched *zero* turns on real
+   transcripts, silently degrading to plain `chunk_text()` and dropping all
+   speaker/timestamp citations.
+
+**Corrections:**
+- **Source** — rewrote `fetch.py` to enumerate `episodes/*/transcript.md` via the
+  GitHub Git-Trees API and fetch each file from `raw.githubusercontent.com`.
+  Removed the obsolete `include_newsletters` path and the `index.json` dependency.
+  Metadata now comes from the archive's YAML frontmatter (`guest`, `title`,
+  `publish_date`, `youtube_url`); `episode_id` is the guest slug.
+- **Parser** — replaced `_TURN_LABEL_RE` with a line-anchored pattern that treats
+  a timestamp-only line as a continuation of the current speaker. Whitespace is
+  limited to `[ \t]` (never `\s`), so a label cannot span newlines and mis-attach
+  the following text. A leading timestamp-only line before any named speaker is
+  skipped rather than attributed to a fabricated speaker.
+- **Tests** — updated speaker-turn tests to the real format and added regression
+  cases for (a) timestamp-only continuation inheriting the speaker and (b) a
+  leading timestamp-only line producing no turns.
+- **Docs** — updated README, `docs/architecture.md`, and this log to point at the
+  correct source and episode count (~300, not ~50).
+
+**Failure / correction:** the first regex draft used `\s*` around the label and
+matched across blank lines, causing a timestamp-only `(HH:MM:SS):` to swallow the
+preceding paragraph. Tightened to `^[ \t]*` + `[ \t]+`/`[ \t]*` and anchored with
+`re.MULTILINE`; the new regression tests pin this behavior.

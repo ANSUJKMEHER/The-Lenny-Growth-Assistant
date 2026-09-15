@@ -62,9 +62,10 @@ async def test_retrieval_empty_corpus(db):
 
 async def test_speaker_transcript_sets_chunk_metadata(db):
     text = (
-        "**Lenny Rachitsky** (00:00:00):\nWelcome to the show.\n\n"
-        "**Shreyas Doshi** (00:01:00):\nPre-mortems surface Tigers and Paper Tigers. "
-        "Elephants are the ignored big risks that sink a launch.\n"
+        "Lenny Rachitsky (00:00:00):\nWelcome to the show.\n\n"
+        "Shreyas Doshi (00:01:00):\nPre-mortems surface Tigers and Paper Tigers. "
+        "Elephants are the ignored big risks that sink a launch.\n\n"
+        "(00:02:00):\nAnd here is a timestamp-only continuation of the same speaker.\n"
     )
     stats, source = await ingest.ingest_document(
         db, text, title="Pre-mortems", episode_id="23", speaker="Shreyas Doshi"

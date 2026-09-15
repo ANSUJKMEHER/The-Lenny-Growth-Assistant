@@ -12,9 +12,17 @@ from dataclasses import dataclass
 
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 
-# Speaker-turn label in podcast transcripts, e.g. "**Keith Rabois** (00:12:34):".
+# Speaker-turn labels in the ChatPRD transcript archive:
+#   "Lenny (00:01:01):"  -> a named speaker starts a turn
+#   "(00:01:27):"        -> timestamp-only continuation of the current speaker
+# The turn text follows the label and spans one or more paragraphs until the
+# next label. Labels are anchored to the start of a line and the whitespace is
+# restricted to spaces/tabs (never newlines), so a timestamp-only line can never
+# leak backward and mis-attach text to the previous speaker.
 _TURN_LABEL_RE = re.compile(
-    r"\*\*\s*([^*\n]+?)\s*\*\*\s*\((\d{1,2}:\d{2}(?::\d{2})?)\)\s*:\s*"
+    r"^[ \t]*(?:(?P<speaker>[^\n(][^\n]*?)[ \t]+)?"
+    r"\((?P<ts>\d{1,2}:\d{2}(?::\d{2})?)\):[ \t]*",
+    re.MULTILINE,
 )
 
 
@@ -107,19 +115,32 @@ def chunk_text(
 def parse_speaker_turns(text: str) -> list[tuple[str, str, str]]:
     """Split a speaker-labelled transcript into (speaker, timestamp, turn_text).
 
-    Expects the podcast format ``**Speaker Name** (HH:MM:SS):`` at the start of
-    each turn. Returns ``[]`` when the text has no such labels.
+    Supports the ChatPRD transcript archive format:
+
+    * ``Speaker Name (HH:MM:SS):`` starts a new speaker turn, and
+    * ``(HH:MM:SS):`` is a timestamp-only continuation that keeps the current
+      speaker.
+
+    Returns ``[]`` when the text has no such labels.
     """
     matches = list(_TURN_LABEL_RE.finditer(text))
     if not matches:
         return []
     turns: list[tuple[str, str, str]] = []
+    current_speaker: str | None = None
     for i, m in enumerate(matches):
         start = m.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         body = text[start:end].strip()
+        named = (m.group("speaker") or "").strip()
+        if named:
+            current_speaker = named
+        if current_speaker is None:
+            # A timestamp-only line before any speaker is named can't be
+            # attributed; skip it rather than fabricate a speaker.
+            continue
         if body:
-            turns.append((m.group(1).strip(), m.group(2), body))
+            turns.append((current_speaker, m.group("ts"), body))
     return turns
 
 
@@ -130,9 +151,10 @@ def chunk_speaker_turns(
 ) -> list[SpeakerChunk]:
     """Chunk a speaker-labelled transcript, carrying speaker + timestamp.
 
-    Turns are concatenated into ~``target_tokens`` windows (with trailing-turn
-    overlap) so cross-turn context is preserved, and each chunk records the
-    speaker/timestamp of the turn it starts at for deep citations.
+    Turns (including timestamp-only continuations of the same speaker) are
+    concatenated into ~``target_tokens`` windows with trailing-turn overlap so
+    cross-turn context is preserved, and each chunk records the speaker/timestamp
+    of the turn it starts at for deep citations.
     """
     turns = parse_speaker_turns(text)
     if not turns:

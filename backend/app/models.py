@@ -124,7 +124,8 @@ class Chunk(Base):
     text: Mapped[str] = mapped_column(Text)
     # Speaker + timestamp of the transcript turn where this chunk starts, when
     # the source is a speaker-labelled podcast transcript (e.g.
-    # "**Lenny Rachitsky** (00:12:34):"). Enables deep, per-chunk citations.
+    # "Lenny Rachitsky (00:12:34):", or "(00:12:34):" for a continuation of the
+    # same speaker). Enables deep, per-chunk citations.
     speaker: Mapped[str | None] = mapped_column(String(128), nullable=True)
     timestamp: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # Embedding stored as a JSON list of floats. PostgreSQL JSONB and SQLite

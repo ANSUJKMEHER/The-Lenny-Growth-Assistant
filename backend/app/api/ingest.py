@@ -30,7 +30,7 @@ async def seed(db: AsyncSession = Depends(get_db)) -> IngestResult:
 
 @router.post("/ingest/fetch", response_model=IngestResult)
 async def fetch_official(db: AsyncSession = Depends(get_db)) -> IngestResult:
-    """Fetch + ingest the official Lenny's Podcast starter pack (50 episodes)."""
+    """Fetch + ingest transcripts from the official Lenny's Podcast archive."""
     stats = await fetch.fetch_official_dataset(db)
     await db.commit()
     return IngestResult(**stats.__dict__)

@@ -48,9 +48,9 @@ def test_cosine_similarity():
 
 def test_parse_speaker_turns():
     text = (
-        "**Lenny Rachitsky** (00:00:00):\nWelcome to the show.\n\n"
-        "**Shreyas Doshi** (00:01:00):\nPre-mortems surface Tigers and Paper Tigers.\n\n"
-        "**Lenny Rachitsky** (00:02:30):\nAnd Elephants.\n"
+        "Lenny Rachitsky (00:00:00):\nWelcome to the show.\n\n"
+        "Shreyas Doshi (00:01:00):\nPre-mortems surface Tigers and Paper Tigers.\n\n"
+        "Lenny Rachitsky (00:02:30):\nAnd Elephants.\n"
     )
     turns = parse_speaker_turns(text)
     assert len(turns) == 3
@@ -59,11 +59,35 @@ def test_parse_speaker_turns():
     assert turns[1][1] == "00:01:00"
 
 
+def test_parse_speaker_turns_timestamp_only_continuation():
+    """A timestamp-only line (no speaker name) must inherit the current speaker."""
+    text = (
+        "Lenny (00:01:01):\nToday my guest is Brian Chesky.\n\n"
+        "(00:01:27):\nIn our conversation, Brian shares his playbook.\n\n"
+        "Brian Chesky (00:05:04):\nWell, thank you for having me.\n"
+    )
+    turns = parse_speaker_turns(text)
+    assert len(turns) == 3
+    assert turns[0] == ("Lenny", "00:01:01", "Today my guest is Brian Chesky.")
+    # The timestamp-only line keeps the previous speaker.
+    assert turns[1][0] == "Lenny"
+    assert turns[1][1] == "00:01:27"
+    assert turns[1][2].startswith("In our conversation")
+    assert turns[2][0] == "Brian Chesky"
+    assert turns[2][1] == "00:05:04"
+
+
+def test_parse_speaker_turns_timestamp_only_before_any_speaker():
+    """A leading timestamp-only line with no named speaker is not mis-attributed."""
+    text = "(00:01:27):\nSome untitled continuation text.\n"
+    assert parse_speaker_turns(text) == []
+
+
 def test_chunk_speaker_turns_carries_metadata():
     text = (
-        "**Lenny Rachitsky** (00:00:00):\n"
+        "Lenny Rachitsky (00:00:00):\n"
         + "Sentence one about product strategy. " * 3
-        + "\n\n**Shreyas Doshi** (00:01:00):\n"
+        + "\n\nShreyas Doshi (00:01:00):\n"
         + "Sentence two about pre-mortems. " * 3
     )
     chunks = chunk_speaker_turns(text, target_tokens=40, overlap_tokens=10)
