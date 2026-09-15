@@ -375,7 +375,6 @@ class Agent:
                     async for chunk in self.provider.stream(messages, tools=None):
                         if chunk.text:
                             grounded_parts.append(chunk.text)
-                            yield AgentEvent(kind="token", data=chunk.text)
                     if grounded_parts:
                         content = "".join(grounded_parts)
 
@@ -390,6 +389,13 @@ class Agent:
                     )
                 if passages:
                     content = _build_grounded_answer(passages)
+
+            # The first-pass answer is buffered (not streamed) so the client never
+            # shows an un-grounded draft. Emit the final content once now that the
+            # grounding decision is made. (Answers that already streamed during a
+            # post-tool pass are left untouched.)
+            if not trace:
+                yield AgentEvent(kind="token", data=content or "")
 
             yield AgentEvent(
                 kind="done",
