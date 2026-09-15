@@ -367,3 +367,34 @@ producing a vague or "can't find it" reply despite populated data.
   searching is still grounded (citations attached, grounded answer returned).
 
 **Result:** 50 tests pass.
+
+## Iteration 15 — Guarantee grounded answers regardless of model quality
+
+**What:** after force-grounding (Iteration 14), a local model could still return
+generic, uncited advice — e.g. "How do I know I've found product-market fit?" →
+"customer validation, revenue growth, market size…" — even though the corpus
+contains the right transcript. Root cause: weak local models (a) ignore JSON
+retrieved payloads and (b) sometimes ignore the retrieved passages entirely and
+synthesize generic advice.
+
+**Corrections:**
+- `agent.py` — grounding guarantee:
+  1. Deterministically retrieves for any substantive question the model answered
+     without searching.
+  2. Re-answers on **readable, numbered passages** (not the JSON the tool returns).
+  3. If the answer still does not cite a source (`[n]` marker or episode title),
+     substitutes a **deterministic verbatim, source-tagged answer** built directly
+     from the retrieved chunks.
+  Also buffers the first-pass answer text so the un-grounded draft is never
+  streamed to the client before it is replaced.
+- `retriever.py` — fixed two latent issues: a `self._tokenize` typo in the BM25
+  fallback (would `AttributeError` whenever the lexical path ran), and the
+  embedding path now (a) only runs when real embeddings are available at query
+  time (avoids mixing nomic vectors with lexical-hash fallback vectors) and
+  (b) falls through to BM25 instead of returning empty on zero/negative cosine.
+- `embedder.py` — added `real_embeddings_available()` so retrieval can detect
+  the lexical-fallback (different vector space) case.
+- Added regression test: a model that answers generically is replaced with the
+  source-tagged answer.
+
+**Result:** 51 tests pass.

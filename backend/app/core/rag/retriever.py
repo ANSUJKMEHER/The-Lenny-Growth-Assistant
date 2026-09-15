@@ -95,8 +95,12 @@ class Retriever:
 
         chunks: list[tuple[Chunk, TranscriptSource]] = [(c, s) for c, s in rows]
 
-        # Prefer semantic search if embeddings are present.
-        if any(c.embedding for c, _ in chunks):
+        # Prefer semantic search if chunk embeddings are present AND the query
+        # embedding is a real model vector. If the embedding model is unavailable
+        # at query time, the query vector is a lexical-hash fallback that lives in
+        # a different space than any stored model vectors, so cosine similarity
+        # would be noise — skip straight to BM25 instead.
+        if any(c.embedding for c, _ in chunks) and await self.embedder.real_embeddings_available():
             try:
                 qvec = await self.embedder.embed(query)
                 scored = []
@@ -104,18 +108,22 @@ class Retriever:
                     sim = self.embedder.cosine(qvec, c.embedding or [])
                     scored.append((sim, c, s))
                 scored.sort(key=lambda t: t[0], reverse=True)
-                return [
+                hits = [
                     self._to_result(c, s, sim, "embedding")
                     for sim, c, s in scored[:top_k]
                     if sim > 0
                 ]
+                if hits:
+                    return hits
+                # No positive similarity: fall through to BM25 rather than
+                # returning an empty (or effectively random) result set.
             except Exception as exc:  # pragma: no cover - defensive
                 logger.warning("Embedding retrieval failed, falling back to BM25: %s", exc)
 
         # Lexical fallback.
-        corpus = [self._tokenize(c.text) for c, _ in chunks]
+        corpus = [_tokenize(c.text) for c, _ in chunks]
         bm25 = _BM25(corpus)
-        qterms = self._tokenize(query)
+        qterms = _tokenize(query)
         scored = sorted(
             ((bm25.score(qterms, corpus[i]), chunks[i]) for i in range(len(chunks))),
             key=lambda t: t[0],

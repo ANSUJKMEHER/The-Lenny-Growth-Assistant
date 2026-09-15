@@ -198,3 +198,34 @@ async def test_agent_force_grounds_when_model_skips_search(db):
     assert result.grounded is True
     assert ctx.citations, "force-grounding must retrieve and attach citations"
     assert "value hypothesis" in result.content
+
+
+async def test_agent_falls_back_to_grounded_answer_when_model_is_generic(db):
+    """Regression: a weak local model can answer with generic advice even after
+    retrieval. The agent must substitute a verbatim, source-tagged answer rather
+    than returning un-grounded fluff (the "product-market fit" screenshot)."""
+    await ingest.ingest_document(db, SAMPLE, title="Fit 101", episode_id="101")
+    await db.commit()
+
+    generic = (
+        "Based on the search results, here are some general guidelines: "
+        "customer validation, revenue growth, customer retention, market size, "
+        "and competitive advantage."
+    )
+    provider = FakeProvider(
+        [
+            LLMResponse(content=generic),  # first pass: no search
+            LLMResponse(content=generic),  # forced re-answer: still generic
+        ]
+    )
+    ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
+    result = await Agent(provider).run(
+        ctx,
+        [ChatMessage(role="user", content="How do I know I've found product-market fit?")],
+    )
+
+    assert result.grounded is True
+    assert ctx.citations
+    # The generic answer must be replaced by the source-tagged fallback.
+    assert "customer validation" not in result.content
+    assert "Fit 101" in result.content

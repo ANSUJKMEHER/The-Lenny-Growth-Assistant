@@ -16,6 +16,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from app.config import get_settings
 from app.core.agent.context import ToolContext
 from app.core.agent.tool import Tool
 from app.core.agent.tools import ListSourcesTool, SearchTranscriptsTool
@@ -122,6 +123,77 @@ def off_topic_response(text: str) -> str | None:
     return None
 
 
+_GREETING_RE = re.compile(
+    r"^(hi|hello|hey|yo|sup|thanks|thank you|good (morning|afternoon|evening)|"
+    r"ok|okay|bye|goodbye)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_substantive(text: str) -> bool:
+    """True for a real question that should be grounded; False for chit-chat."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    return _GREETING_RE.match(t) is None
+
+
+def _format_passages(results) -> str:
+    """Render retrieved chunks as a readable, numbered block for the model."""
+    parts = []
+    for i, r in enumerate(results, 1):
+        src = r.title or "Lenny's Podcast"
+        if getattr(r, "episode_id", None):
+            src += f" (episode {r.episode_id})"
+        if getattr(r, "speaker", None):
+            src += f" — {r.speaker}"
+        if getattr(r, "timestamp", None):
+            src += f" @ {r.timestamp}"
+        parts.append(f"[{i}] {src}\n{r.text.strip()}")
+    return "\n\n".join(parts)
+
+
+def _title_signature(title: str | None) -> str:
+    """Normalized title used to detect whether an answer cited a source."""
+    cleaned = re.sub(r"\[[^\]]*\]", " ", title or "")
+    return _normalize(cleaned)
+
+
+def _mentions_source(content: str, citations) -> bool:
+    """True if ``content`` references at least one retrieved source."""
+    if not content:
+        return False
+    for i in range(1, len(citations) + 1):
+        if f"[{i}]" in content:
+            return True
+    norm = _normalize(content)
+    for c in citations:
+        sig = _title_signature(getattr(c, "title", None))
+        if sig and sig in norm:
+            return True
+    return False
+
+
+def _build_grounded_answer(results) -> str:
+    """Deterministic, verbatim, source-tagged answer used when the model's
+    synthesis is generic or otherwise fails to cite the retrieved material."""
+    lines = ["Here's what Lenny's Podcast says about that:\n"]
+    for r in results[:3]:
+        src = r.title or "Lenny's Podcast"
+        if getattr(r, "episode_id", None):
+            src += f" (episode {r.episode_id})"
+        meta = ""
+        if getattr(r, "speaker", None):
+            meta += f" — {r.speaker}"
+        if getattr(r, "timestamp", None):
+            meta += f" @ {r.timestamp}"
+        text = r.text.strip()
+        if len(text) > 600:
+            text = text[:600].rstrip() + "…"
+        lines.append(f"**{src}**{meta}:\n> {text}\n")
+    return "\n".join(lines).strip()
+
+
 @dataclass
 class AgentResult:
     content: str
@@ -219,10 +291,12 @@ class Agent:
                     tool_calls.extend(chunk.tool_calls)
                 if chunk.text:
                     text_parts.append(chunk.text)
-                    # Only stream text when this turn is an answer, not a tool
-                    # call. (Ollama never mixes the two; the single-shot fallback
-                    # can, in which case we buffer instead of emitting.)
-                    if not chunk.tool_calls and not tool_calls:
+                    # Only stream answer text after a tool has already run (trace
+                    # is non-empty). The first-pass answer is buffered because it
+                    # may need force-grounding: if the model answered without
+                    # searching we replace it with a grounded answer, and we don't
+                    # want to have already streamed the generic text to the client.
+                    if not chunk.tool_calls and not tool_calls and trace:
                         yield AgentEvent(kind="token", data=chunk.text)
 
             if tool_calls:
@@ -244,6 +318,7 @@ class Agent:
                 continue
 
             content = "".join(text_parts)
+            retrieved = None
 
             # Defense in depth: if the model answered with a code block directly
             # (no tool was used), it ignored the scope guard. Swap in the branded
@@ -256,36 +331,65 @@ class Agent:
                 )
                 return
 
-            # Force grounding: local models sometimes answer without invoking
-            # search_transcripts (especially on a cold start), producing a vague
-            # or "I can't find it" response. If the model returned a substantive
-            # answer with no retrieval this turn, search now and re-answer on the
-            # grounded material so every answer is source-backed.
-            if not trace and not ctx.citations and content.strip():
-                search = self._by_name.get("search_transcripts")
-                if search is not None:
-                    yield AgentEvent(kind="tool", data="search_transcripts")
-                    search_result = await search.run(ctx, query=last_user)
-                    if ctx.citations:
-                        messages.append(ChatMessage(role="assistant", content=content))
-                        messages.append(
-                            ChatMessage(
-                                role="user",
-                                content=(
-                                    "Answer the user's original question using ONLY the "
-                                    "retrieved Lenny's Podcast material below. Be specific "
-                                    "and cite the episode/speaker. Do not invent facts.\n\n"
-                                    "Retrieved material:\n" + search_result.content
-                                ),
-                            )
+            # ---- Grounding guarantee --------------------------------------
+            # Local models often answer without searching, or search and then
+            # ignore the passages and produce generic advice. We therefore
+            # (1) retrieve deterministically for any substantive question the
+            # model failed to ground, (2) re-answer on readable (non-JSON)
+            # passages, and (3) fall back to a verbatim, source-tagged answer if
+            # the model still won't cite a source. This makes grounding
+            # independent of the model's tool-calling ability.
+            searched = "search_transcripts" in trace
+            if not searched and not ctx.citations and _is_substantive(last_user):
+                retrieved = await ctx.retriever.retrieve(
+                    ctx.db, last_user, top_k=get_settings().retrieval_top_k
+                )
+                if retrieved:
+                    for r in retrieved:
+                        ctx.add_citation(
+                            r.source_id,
+                            r.title,
+                            r.chunk_index,
+                            r.text[:280],
+                            speaker=r.speaker,
+                            timestamp=r.timestamp,
+                            url=r.url,
                         )
-                        grounded_parts: list[str] = []
-                        async for chunk in self.provider.stream(messages, tools=None):
-                            if chunk.text:
-                                grounded_parts.append(chunk.text)
-                                yield AgentEvent(kind="token", data=chunk.text)
-                        if grounded_parts:
-                            content = "".join(grounded_parts)
+                    yield AgentEvent(kind="tool", data="search_transcripts")
+                    messages.append(ChatMessage(role="assistant", content=content))
+                    messages.append(
+                        ChatMessage(
+                            role="user",
+                            content=(
+                                "Answer the user's original question using ONLY the "
+                                "retrieved Lenny's Podcast passages below. Quote or closely "
+                                "paraphrase them, name the episode and speaker, and tag each "
+                                "point with its bracketed source number (e.g. [1], [2]). Do "
+                                "not give generic advice, do not invent facts, and do not "
+                                "answer from outside knowledge.\n\nRetrieved passages:\n"
+                                + _format_passages(retrieved)
+                            ),
+                        )
+                    )
+                    grounded_parts: list[str] = []
+                    async for chunk in self.provider.stream(messages, tools=None):
+                        if chunk.text:
+                            grounded_parts.append(chunk.text)
+                            yield AgentEvent(kind="token", data=chunk.text)
+                    if grounded_parts:
+                        content = "".join(grounded_parts)
+
+            # If the model still produced an un-grounded answer despite having
+            # retrieved material, substitute a verbatim, source-tagged answer so
+            # the response is never generic fluff.
+            if ctx.citations and not _mentions_source(content, ctx.citations):
+                passages = retrieved
+                if not passages:
+                    passages = await ctx.retriever.retrieve(
+                        ctx.db, last_user, top_k=get_settings().retrieval_top_k
+                    )
+                if passages:
+                    content = _build_grounded_answer(passages)
 
             yield AgentEvent(
                 kind="done",

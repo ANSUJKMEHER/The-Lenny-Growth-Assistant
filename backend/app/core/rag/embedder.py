@@ -61,6 +61,15 @@ class EmbeddingService:
                 )
         return self._ollama_ok
 
+    async def real_embeddings_available(self) -> bool:
+        """True when the configured embedding model is actually reachable.
+
+        When this is False, :meth:`embed`/ :meth:`embed_many` use the lexical
+        hashing fallback, whose vectors live in a different space than real
+        model vectors. Retrieval uses this to avoid mixing the two spaces.
+        """
+        return await self._ollama_available()
+
     async def embed(self, text: str) -> list[float]:
         """Embed a single text, preferring Ollama and falling back to lexical."""
         if await self._ollama_available():
