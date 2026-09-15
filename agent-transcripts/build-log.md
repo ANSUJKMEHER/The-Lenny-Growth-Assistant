@@ -493,3 +493,21 @@ crowd out "positioning".
   both clauses.
 
 **Result:** 55 tests pass.
+
+## Iteration 21 — Seed samples even when real transcripts already exist
+
+**What:** "product-market fit and positioning" kept returning off-topic real
+episodes (Adriel Frederick's algorithms, Alex Hardiman's NYT intro) with no
+positioning content. Root cause: `ensure_corpus` seeded the bundled samples
+(which cover the four demo prompts, incl. positioning) **only when the corpus was
+empty**. Once real transcripts had been fetched, the early-return skipped
+samples entirely, so "positioning" had no matching material.
+
+**Corrections:**
+- `fetch.py` — `ensure_corpus` now seeds the samples **before** the emptiness
+  check (idempotent), and only the network fetch is skipped when real transcripts
+  already exist.
+- Added regression test: samples are seeded alongside pre-existing real
+  transcripts.
+
+**Result:** 56 tests pass.

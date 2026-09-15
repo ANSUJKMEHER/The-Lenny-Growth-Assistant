@@ -117,27 +117,25 @@ async def fetch_official_dataset(
 async def ensure_corpus(db: AsyncSession) -> IngestStats:
     """Make sure the knowledge base has demo-ready transcripts.
 
-    On a fresh database:
-    1. Seed the bundled demo samples first — they cover the suggested prompts
-       (retention, activation, PMF, positioning) so the demo works offline.
-    2. Best-effort fetch + ingest real Lenny's Podcast transcripts as
-       enrichment (skipped if the network is unavailable).
-
-    Idempotent.
+    The bundled samples are **always** seeded (idempotent) so the four suggested
+    demo prompts (retention, activation, PMF, positioning) are covered even when
+    real transcripts were already fetched on a previous boot. Real transcripts
+    are then fetched once as enrichment.
     """
-    count = (await db.execute(select(func.count(TranscriptSource.id)))).scalar_one()
-    if count:
-        stats = IngestStats()
-        stats.sources_skipped = count
-        return stats
-
     from app.core.rag.ingest import seed_samples
 
-    logger.info("Corpus empty — seeding demo samples, then fetching real transcripts")
+    # Always seed samples first — they guarantee the demo prompts have grounding
+    # data, independent of whether real transcripts exist yet.
     stats = await seed_samples(db)
 
-    # Enrich with real transcripts (best-effort). Failures are non-fatal: the
-    # samples alone guarantee the demo's suggested prompts have grounding data.
+    count = (await db.execute(select(func.count(TranscriptSource.id)))).scalar_one()
+    if count > stats.sources_created:
+        # Real transcripts already exist (more than just the samples we seeded),
+        # so skip the network fetch to keep startup fast.
+        return stats
+
+    # Fresh corpus: enrich with real transcripts (best-effort). Failures are
+    # non-fatal: the samples alone guarantee the demo prompts have grounding data.
     try:
         real = await fetch_official_dataset(db, limit=10)
     except Exception as exc:  # pragma: no cover - network resilience

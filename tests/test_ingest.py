@@ -1,5 +1,5 @@
 """Ingestion: chunking, idempotency, and retrieval end-to-end (lexical fallback)."""
-from app.core.rag import ingest
+from app.core.rag import fetch, ingest
 from app.core.rag.retriever import Retriever
 from app.models import Chunk, TranscriptSource
 from sqlalchemy import func, select
@@ -80,6 +80,23 @@ async def test_retrieval_splits_compound_query(db):
     titles = {r.title for r in results}
     assert "Fit episode" in titles, "compound retrieval dropped the PMF clause"
     assert "Positioning episode" in titles, "compound retrieval dropped the positioning clause"
+
+
+async def test_ensure_corpus_seeds_samples_even_when_real_exists(db):
+    """Regression: the bundled demo samples must be seeded even when real
+    transcripts already exist, so the four suggested prompts (incl. positioning)
+    are always covered."""
+    await ingest.ingest_document(
+        db, "Real episode text about growth.", title="Real Episode", episode_id="real"
+    )
+    await db.commit()
+
+    await fetch.ensure_corpus(db)
+    await db.commit()
+
+    titles = {t for (t,) in (await db.execute(select(TranscriptSource.title))).all()}
+    assert "Real Episode" in titles
+    assert any("[SAMPLE]" in t for t in titles), "samples must be seeded alongside real transcripts"
 
 
 async def test_speaker_transcript_sets_chunk_metadata(db):
