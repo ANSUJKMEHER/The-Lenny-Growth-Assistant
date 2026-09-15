@@ -45,6 +45,23 @@ def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(text.lower())
 
 
+_COMPOUND_SPLIT_RE = re.compile(
+    r"\band\b|\bor\b|\bvs\.?\b|\bversus\b", re.IGNORECASE
+)
+
+
+def _split_compound_query(query: str) -> list[str]:
+    """Split a compound query ("X and Y") into its clauses for better recall.
+
+    A single blended query vector over-weights the longer/topic-dominant clause
+    (e.g. "product-market fit" in "product-market fit and positioning") and can
+    drop the other. Retrieving each clause separately keeps both topics present.
+    """
+    clauses = [p.strip().strip("?!.,:;()").strip() for p in _COMPOUND_SPLIT_RE.split(query)]
+    clauses = [c for c in clauses if c]
+    return clauses if len(clauses) > 1 else [query]
+
+
 class _BM25:
     def __init__(self, docs: list[list[str]]) -> None:
         self.docs = docs
@@ -83,7 +100,31 @@ class Retriever:
     async def retrieve(
         self, db: AsyncSession, query: str, top_k: int = 6
     ) -> list[RetrievedChunk]:
-        """Retrieve the top-k most relevant chunks with source metadata."""
+        """Retrieve the top-k most relevant chunks with source metadata.
+
+        Compound queries ("X and Y") are split into clauses and retrieved
+        separately, then merged and de-duplicated, so both topics are
+        represented instead of one clause dominating the result set.
+        """
+        clauses = _split_compound_query(query)
+        if len(clauses) == 1:
+            return await self._retrieve_single(db, clauses[0], top_k)
+
+        merged: list[RetrievedChunk] = []
+        seen: set[tuple[str, int]] = set()
+        for clause in clauses:
+            for r in await self._retrieve_single(db, clause, top_k):
+                key = (r.source_id, r.chunk_index)
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(r)
+        merged.sort(key=lambda r: r.score, reverse=True)
+        return merged[:top_k]
+
+    async def _retrieve_single(
+        self, db: AsyncSession, query: str, top_k: int = 6
+    ) -> list[RetrievedChunk]:
+        """Retrieve the top-k chunks for a single (non-compound) query."""
         stmt = (
             select(Chunk, TranscriptSource)
             .join(TranscriptSource, Chunk.source_id == TranscriptSource.id)

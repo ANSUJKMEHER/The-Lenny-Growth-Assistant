@@ -60,6 +60,28 @@ async def test_retrieval_empty_corpus(db):
     assert results == []
 
 
+async def test_retrieval_splits_compound_query(db):
+    """A compound query ("X and Y") must surface chunks for BOTH clauses, not
+    let one clause dominate the merged result set."""
+    await ingest.ingest_document(
+        db, "Product-market fit is when users keep returning for value.",
+        title="Fit episode", episode_id="fit",
+    )
+    await ingest.ingest_document(
+        db, "Positioning is choosing a market category and a specific customer.",
+        title="Positioning episode", episode_id="pos",
+    )
+    await db.commit()
+
+    retriever = Retriever()
+    results = await retriever.retrieve(
+        db, "product-market fit and positioning", top_k=4
+    )
+    titles = {r.title for r in results}
+    assert "Fit episode" in titles, "compound retrieval dropped the PMF clause"
+    assert "Positioning episode" in titles, "compound retrieval dropped the positioning clause"
+
+
 async def test_speaker_transcript_sets_chunk_metadata(db):
     text = (
         "Lenny Rachitsky (00:00:00):\nWelcome to the show.\n\n"

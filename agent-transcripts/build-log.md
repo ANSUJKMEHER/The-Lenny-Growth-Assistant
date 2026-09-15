@@ -476,3 +476,20 @@ on CPU.
   frontend static bundle to match.
 
 **Result:** 54 tests pass; frontend builds clean.
+
+## Iteration 20 — Compound-query retrieval (fix "PMF and positioning")
+
+**What:** "What does Lenny say about product-market fit and positioning?" returned
+solid PMF content but dropped the positioning half (surfaced Adriel Frederick's
+algorithms chunk instead). Root cause: the query was embedded as a single blended
+vector, which over-weighted the longer clause ("product-market fit") and let it
+crowd out "positioning".
+
+**Corrections:**
+- `retriever.py` — `retrieve` now splits compound queries on "and"/"or"/"vs"/
+  "versus", retrieves each clause separately, then merges + de-duplicates by
+  (source, chunk) and re-ranks by score, so both topics are represented.
+- Added regression test: "product-market fit and positioning" surfaces chunks for
+  both clauses.
+
+**Result:** 55 tests pass.
