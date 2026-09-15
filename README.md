@@ -208,7 +208,7 @@ runtime rather than committed, chunked (with speaker + timestamp preserved), and
 indexed with source metadata.
 
 ```bash
-# Fetch + ingest the official starter pack on demand:
+# Fetch + ingest the official transcript archive on demand:
 curl -X POST http://localhost:8000/api/ingest/fetch
 
 # Ingest bundled samples (offline fallback):
