@@ -198,7 +198,11 @@ async def ingest_directory(db: AsyncSession, directory: Path) -> IngestStats:
     stats = IngestStats()
 
     files = sorted(
-        [*directory.glob("*.md"), *directory.glob("*.txt")]
+        [
+            p
+            for p in [*directory.glob("*.md"), *directory.glob("*.txt")]
+            if p.name.lower() != "readme.md"
+        ]
     )
     if not files:
         stats.errors.append(f"No .md/.txt transcripts found in {directory}")
@@ -282,7 +286,10 @@ async def ingest_url(db: AsyncSession, url: str, title: str | None = None) -> In
 
 async def seed_samples(db: AsyncSession) -> IngestStats:
     """Ingest the bundled sample transcripts (see backend/data/transcripts)."""
-    base = Path(__file__).resolve().parents[2] / "data" / "transcripts"
+    # This file lives at backend/app/core/rag/ingest.py, so the repo `backend/`
+    # directory is three parents up (parents[3]) — NOT parents[2], which would
+    # resolve to backend/app and miss the data directory entirely.
+    base = Path(__file__).resolve().parents[3] / "data" / "transcripts"
     if not base.exists():
         stats = IngestStats()
         stats.errors.append(f"Seed directory not found: {base}")

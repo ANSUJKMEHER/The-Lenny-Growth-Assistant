@@ -115,12 +115,15 @@ async def fetch_official_dataset(
 
 
 async def ensure_corpus(db: AsyncSession) -> IngestStats:
-    """Make sure the knowledge base has real transcripts.
+    """Make sure the knowledge base has demo-ready transcripts.
 
-    On a fresh database, fetch a starter set of transcripts from the official
-    Lenny's Podcast archive. If the network is unavailable (or the fetch yields
-    nothing), fall back to the bundled sample transcripts so the demo still works
-    end-to-end. Idempotent.
+    On a fresh database:
+    1. Seed the bundled demo samples first — they cover the suggested prompts
+       (retention, activation, PMF, positioning) so the demo works offline.
+    2. Best-effort fetch + ingest real Lenny's Podcast transcripts as
+       enrichment (skipped if the network is unavailable).
+
+    Idempotent.
     """
     count = (await db.execute(select(func.count(TranscriptSource.id)))).scalar_one()
     if count:
@@ -128,15 +131,21 @@ async def ensure_corpus(db: AsyncSession) -> IngestStats:
         stats.sources_skipped = count
         return stats
 
-    logger.info("Corpus empty — fetching official Lenny's Podcast transcripts")
-    stats = await fetch_official_dataset(db, limit=10)
-    if stats.sources_created == 0:
-        if stats.errors:
-            logger.warning(
-                "Official fetch produced nothing (%s); seeding bundled samples",
-                stats.errors[0] if len(stats.errors) == 1 else f"{len(stats.errors)} errors",
-            )
-        from app.core.rag.ingest import seed_samples
+    from app.core.rag.ingest import seed_samples
 
-        stats = await seed_samples(db)
+    logger.info("Corpus empty — seeding demo samples, then fetching real transcripts")
+    stats = await seed_samples(db)
+
+    # Enrich with real transcripts (best-effort). Failures are non-fatal: the
+    # samples alone guarantee the demo's suggested prompts have grounding data.
+    try:
+        real = await fetch_official_dataset(db, limit=10)
+    except Exception as exc:  # pragma: no cover - network resilience
+        stats.errors.append(f"Official fetch failed (samples still seeded): {exc}")
+    else:
+        stats.sources_created += real.sources_created
+        stats.sources_skipped += real.sources_skipped
+        stats.chunks_created += real.chunks_created
+        stats.errors.extend(real.errors)
+
     return stats

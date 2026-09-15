@@ -85,3 +85,22 @@ async def test_speaker_transcript_sets_chunk_metadata(db):
     assert results
     assert results[0].speaker
     assert results[0].timestamp
+
+
+async def test_seed_samples_ingests_bundled_transcripts(db):
+    """Regression: seed_samples must resolve backend/data/transcripts correctly
+    and skip the directory README (a data-directory note, not a transcript)."""
+    stats = await ingest.seed_samples(db)
+    await db.commit()
+
+    assert stats.errors == []
+    assert stats.sources_created == 3  # three [SAMPLE] transcripts, README excluded
+
+    rows = (await db.execute(select(TranscriptSource))).scalars().all()
+    titles = {r.title for r in rows}
+    assert len(titles) == 3
+    assert not any("README" in t for t in titles)
+    # The samples cover the demo's suggested prompt topics.
+    assert any("Retention" in t for t in titles)
+    assert any("Positioning" in t for t in titles)
+    assert any("Product-Market Fit" in t for t in titles)

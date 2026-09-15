@@ -318,3 +318,33 @@ SQLite (`upgrade` + `downgrade base`) before committing.
 
 **Result:** backend 48 passed; frontend 6 passed; `tsc` + `vite build` clean;
 Alembic `upgrade head`/`downgrade base` verified on SQLite.
+
+## Iteration 13 — Critical fix: demo corpus never seeded (empty knowledge base)
+
+**What:** the user reported the assistant answering "I'm unable to find the
+information you requested" for a basic prompt ("retention and activation").
+Root cause was a path-resolution bug in `seed_samples`:
+
+- `core/rag/ingest.py` lives at `backend/app/core/rag/ingest.py` (3 levels
+  deep), but `seed_samples` used `parents[2]`, resolving to the non-existent
+  `backend/app/data/transcripts`. It therefore always returned "Seed directory
+  not found", so the bundled demo samples were **never** ingested.
+- Combined with `ensure_corpus` only seeding samples when the network fetch
+  produced *zero* sources, a fresh boot could end up with either an empty corpus
+  (offline) or 10 alphabetically-random real episodes that don't cover the
+  demo's suggested prompts (retention/activation/PMF/positioning).
+
+**Corrections:**
+- `seed_samples` now resolves `parents[3]` (the repo `backend/` directory).
+- `ingest_directory` skips `README.md` (a data-directory note, not a transcript).
+- `ensure_corpus` now **always seeds the bundled samples first** (they cover the
+  four suggested prompts), then best-effort fetches real transcripts as
+  enrichment — so the demo works offline and online.
+
+**Failure / correction:** this was missed in the Iteration 12 audit because the
+retrieval repro called `ingest_directory` directly with a correct path, masking
+the broken `seed_samples` path. Added a regression test that calls
+`seed_samples` itself and asserts 3 samples are seeded (README excluded).
+
+**Result:** 49 tests pass; `seed_samples` seeds 3 sources/6 chunks; `ensure_corpus`
+still seeds samples when the network fetch fails.
