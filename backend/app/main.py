@@ -66,6 +66,22 @@ async def lifespan(app: FastAPI):
     except Exception:  # pragma: no cover - bootstrap is non-fatal
         logger.exception("startup corpus bootstrap failed (continuing)")
 
+    # Best-effort warm-up: preload the local Ollama chat model so the first
+    # message doesn't pay cold-load latency (which reads as a stuck spinner).
+    try:
+        from app.core.llm.ollama import OllamaProvider
+
+        warm = OllamaProvider(
+            settings.ollama_base_url,
+            settings.ollama_model,
+            timeout=settings.ollama_timeout_seconds,
+            keep_alive=settings.ollama_keep_alive,
+        )
+        ok, reason = await warm.warmup()
+        logger.info("startup llm_warmup ok=%s reason=%s", ok, reason)
+    except Exception:  # pragma: no cover - warm-up is non-fatal
+        logger.exception("startup LLM warmup failed (continuing)")
+
     yield
     logger.info("shutdown")
 

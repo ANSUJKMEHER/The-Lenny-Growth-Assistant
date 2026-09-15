@@ -28,10 +28,17 @@ logger = logging.getLogger("app.llm.ollama")
 class OllamaProvider(LLMProvider):
     name = "ollama"
 
-    def __init__(self, base_url: str, model: str, timeout: float = 120.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        timeout: float = 120.0,
+        keep_alive: str = "30m",
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.keep_alive = keep_alive
 
     # -- helpers ------------------------------------------------------------ #
     def _system_prompt(self, messages: list[ChatMessage]) -> str | None:
@@ -86,6 +93,7 @@ class OllamaProvider(LLMProvider):
             "messages": self._to_ollama(messages),
             "stream": False,
             "options": {"temperature": 0.2},
+            "keep_alive": self.keep_alive,
         }
         system = self._system_prompt(messages)
         if system:
@@ -154,6 +162,38 @@ class OllamaProvider(LLMProvider):
                         "messages": [{"role": "user", "content": "ping"}],
                         "stream": False,
                         "options": {"num_predict": 1, "temperature": 0},
+                        "keep_alive": self.keep_alive,
+                    },
+                )
+        except httpx.TimeoutException as exc:
+            return False, f"Ollama timed out: {exc}"
+        except httpx.HTTPError as exc:
+            return False, f"Ollama unreachable at {self.base_url}: {exc}"
+        if resp.status_code >= 400:
+            return False, f"Ollama HTTP {resp.status_code}: {resp.text[:200]}"
+        try:
+            resp.json()
+        except json.JSONDecodeError as exc:
+            return False, f"Ollama returned non-JSON response: {exc}"
+        return True, None
+
+    async def warmup(self) -> tuple[bool, str | None]:
+        """Preload the model with a single-token generation.
+
+        Unlike :meth:`healthcheck` (capped at 20s so per-request probes stay
+        cheap), this uses the full timeout so a cold model load can finish.
+        Called once at startup so the first chat message is not slow.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(
+                    f"{self.base_url}/api/chat",
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "stream": False,
+                        "options": {"num_predict": 1, "temperature": 0},
+                        "keep_alive": self.keep_alive,
                     },
                 )
         except httpx.TimeoutException as exc:
@@ -181,6 +221,7 @@ class OllamaProvider(LLMProvider):
             "messages": self._to_ollama(messages),
             "stream": True,
             "options": {"temperature": 0.2},
+            "keep_alive": self.keep_alive,
         }
         system = self._system_prompt(messages)
         if system:

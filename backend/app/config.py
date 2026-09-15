@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1"
     ollama_embed_model: str = "nomic-embed-text"
     ollama_timeout_seconds: float = 120.0
+    # How long Ollama keeps a model resident after use. "30m" keeps the model
+    # loaded across the demo so the first request isn't repeatedly cold.
+    ollama_keep_alive: str = "30m"
 
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-20250514"

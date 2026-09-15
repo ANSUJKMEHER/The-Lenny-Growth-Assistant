@@ -30,6 +30,7 @@ export const App: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [currentStepStatus, setCurrentStepStatus] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>("");
+  const [elapsed, setElapsed] = useState(0);
 
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
@@ -133,6 +134,18 @@ export const App: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingContent, currentStepStatus]);
+
+  // Tick an elapsed timer while a request is in flight so the "thinking"
+  // status visibly shows progress instead of appearing frozen.
+  useEffect(() => {
+    if (!busy) {
+      setElapsed(0);
+      return;
+    }
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
 
   const handleSendMessage = async (textToSend?: string) => {
     const prompt = (textToSend || input).trim();
@@ -252,7 +265,15 @@ export const App: React.FC = () => {
                     {currentStepStatus && (
                       <div className="step-indicator">
                         <Loader2 size={12} className="animate-spin" />
-                        <span>{currentStepStatus}</span>
+                        <span>
+                          {currentStepStatus}
+                          {elapsed > 2 ? ` \u00b7 ${elapsed}s` : ""}
+                        </span>
+                      </div>
+                    )}
+                    {currentStepStatus && elapsed > 20 && (
+                      <div className="step-hint">
+                        Still working \u2014 the local model is warming up on first load. This is normal.
                       </div>
                     )}
                     {streamingContent && (

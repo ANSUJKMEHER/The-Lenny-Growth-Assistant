@@ -40,6 +40,7 @@ def build_provider(provider: Provider, model: str | None = None) -> LLMProvider:
             settings.ollama_base_url,
             model or settings.ollama_model,
             timeout=settings.ollama_timeout_seconds,
+            keep_alive=settings.ollama_keep_alive,
         )
     if provider is Provider.ANTHROPIC:
         if not settings.anthropic_api_key:
