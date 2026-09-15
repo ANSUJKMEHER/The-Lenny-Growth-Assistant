@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     claude_cli_path: str = ""
 
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.1"
+    ollama_model: str = "qwen2.5:7b"
     ollama_embed_model: str = "nomic-embed-text"
     ollama_timeout_seconds: float = 120.0
     # How long Ollama keeps a model resident after use. "30m" keeps the model

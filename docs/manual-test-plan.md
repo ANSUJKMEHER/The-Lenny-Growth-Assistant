@@ -4,11 +4,11 @@ Automated tests cover API, retrieval, ingestion, security, and agent routing
 (`pytest -q`). This script covers the **UI** end-to-end.
 
 **Preconditions:** stack running (`docker compose up --build -d`), Ollama up with
-`llama3.1` + `nomic-embed-text` pulled, sample data seeded (automatic on first start).
+`qwen2.5:7b` + `nomic-embed-text` pulled, sample data seeded (automatic on first start).
 
 | # | Action | Expected result | Pass? |
 |---|---|---|---|
-| 1 | Open http://localhost:8000 | App loads; sidebar shows "Lenny Growth / Assistant", "New chat", and 4 suggested prompts; provider badge shows `ollama · llama3.1`. | ☐ |
+| 1 | Open http://localhost:8000 | App loads; sidebar shows "Lenny Growth / Assistant", "New chat", and 4 suggested prompts; provider badge shows `ollama · qwen2.5:7b`. | ☐ |
 | 2 | Click "New chat" | Empty state appears; no artifacts panel. | ☐ |
 | 3 | Click a suggested prompt (e.g. "product-market fit") | User bubble appears, a status indicator + streaming answer shows, then a grounded answer with **citation chips** (episode title + excerpt). | ☐ |
 | 4 | Ask: "What does Lenny say about activation?" | Answer cites the retention/activation transcript; header title becomes the question. | ☐ |

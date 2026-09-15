@@ -30,4 +30,4 @@ async def test_set_runtime_model_is_idempotent(db):
 async def test_runtime_defaults_when_no_override(db):
     """With no override, the env-provided defaults are returned."""
     assert await settings_store.get_runtime_provider(db) == Provider.OLLAMA
-    assert await settings_store.get_runtime_model(db, Provider.OLLAMA) == "llama3.1"
+    assert await settings_store.get_runtime_model(db, Provider.OLLAMA) == "qwen2.5:7b"

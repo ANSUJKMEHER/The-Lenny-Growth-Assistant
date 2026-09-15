@@ -87,7 +87,7 @@ GET  /health · /health/ready                     → status + checks
   "message": {"id", "role", "content", "citations": [{"source_id","title","chunk_index","excerpt"}], "created_at"},
   "artifacts": [{"id","kind","title","content","created_at"}],
   "provider": "ollama",
-  "model": "llama3.1",
+  "model": "qwen2.5:7b",
   "grounded": true
 }
 ```

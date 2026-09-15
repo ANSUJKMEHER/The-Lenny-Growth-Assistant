@@ -26,8 +26,8 @@
 
 ## 1:45–2:30 — Local Ollama (the mandatory demo)
 
-- Open a terminal: show `ollama list` (llama3.1 + nomic-embed-text).
-- In the app, show the **provider badge = `ollama / llama3.1`**.
+- Open a terminal: show `ollama list` (qwen2.5:7b + nomic-embed-text).
+- In the app, show the **provider badge = `ollama / qwen2.5:7b`**.
 - Switch to Anthropic in the UI (or note it's a toggle), then back to Ollama.
 - Emphasize: **no API keys, fully local.**
 

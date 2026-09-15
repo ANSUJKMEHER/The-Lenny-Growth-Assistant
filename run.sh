@@ -21,8 +21,8 @@ if command -v ollama >/dev/null 2>&1; then
     (ollama serve >/dev/null 2>&1 &) || true
     sleep 3
   fi
-  say "Ensuring models are pulled (llama3.1, nomic-embed-text)…"
-  ollama pull llama3.1 || warn "could not pull llama3.1 (a running Ollama is required for chat)"
+  say "Ensuring models are pulled (qwen2.5:7b, nomic-embed-text)…"
+  ollama pull qwen2.5:7b || warn "could not pull qwen2.5:7b (a running Ollama is required for chat)"
   ollama pull nomic-embed-text || warn "could not pull nomic-embed-text (will fall back to lexical retrieval)"
 else
   warn "Ollama not found — install it from https://ollama.com (the local demo needs it)."

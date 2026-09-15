@@ -86,7 +86,7 @@ export const ModelProviderModal: React.FC<ModelProviderModalProps> = ({
           <div style={{ marginTop: 12, padding: "10px 12px", background: "var(--bg-app)", borderRadius: "var(--radius-sm)", display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11.5, color: "var(--text-muted)" }}>
             <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1, color: "var(--accent)" }} />
             <span>
-              Mandatory demo evaluation runs on local <strong>Ollama (llama3.1)</strong> keyless. Cloud providers require keys in your <code>.env</code>.
+              Mandatory demo evaluation runs on local <strong>Ollama (qwen2.5:7b)</strong> keyless. Cloud providers require keys in your <code>.env</code>.
             </span>
           </div>
         </div>

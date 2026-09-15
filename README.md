@@ -76,7 +76,7 @@ Full details, DB schema, endpoint contracts, and the agent-routing design are in
 ./run.sh
 ```
 
-`run.sh` starts Ollama (pulling `llama3.1` + `nomic-embed-text` if needed), creates
+`run.sh` starts Ollama (pulling `qwen2.5:7b` + `nomic-embed-text` if needed), creates
 `.env` from `.env.example`, and boots the stack with Docker Compose (or a local
 fallback). On first boot the app also auto-fetches a **starter set of real Lenny's
 Podcast episodes** so answers are grounded in real content (the full pack is one
@@ -89,7 +89,7 @@ with a model pulled (the demo requires local Ollama).
 
 ```bash
 # 1. Install + start Ollama (https://ollama.com), then pull models:
-ollama pull llama3.1              # chat model (or any model you prefer)
+ollama pull qwen2.5:7b              # chat model (or any model you prefer)
 ollama pull nomic-embed-text      # embeddings for RAG
 
 # 2. Clone and start the stack
@@ -147,7 +147,7 @@ Every setting is an environment variable with a safe default — see
 | `AGENT_RUNTIME` | `auto` | No | Agent engine: `auto` / `claude_sdk` / `builtin` |
 | `CLAUDE_CLI_PATH` | *(empty)* | Only for SDK | Path to the Claude Code CLI binary |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | No | Ollama endpoint |
-| `OLLAMA_MODEL` | `llama3.1` | No | Local chat model |
+| `OLLAMA_MODEL` | `qwen2.5:7b` | No | Local chat model |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | No | Embedding model |
 | `ANTHROPIC_API_KEY` | *(empty)* | Only for Anthropic | Cloud API key |
 | `OPENAI_API_KEY` | *(empty)* | Only for OpenAI | Cloud API key |
@@ -330,7 +330,7 @@ permits, blocks, and why.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `503 No LLM provider available` | Ollama not running / model not pulled | `ollama serve`, then `ollama pull llama3.1` |
+| `503 No LLM provider available` | Ollama not running / model not pulled | `ollama serve`, then `ollama pull qwen2.5:7b` |
 | Answers not grounded / "knowledge base doesn't cover it" | No transcripts ingested | `POST /api/ingest/seed` or `/api/ingest` |
 | Embeddings slow or falling back to lexical | `nomic-embed-text` not pulled | `ollama pull nomic-embed-text` |
 | `connection refused` on DB | Postgres not up | `docker compose up -d db`, check `DATABASE_URL` |

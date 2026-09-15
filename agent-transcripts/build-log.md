@@ -461,3 +461,18 @@ on CPU.
   speaker-cited answer is not replaced by the fallback.
 
 **Result:** 54 tests pass.
+
+## Iteration 19 — Final polish: PMF disambiguation + default to qwen2.5:7b
+
+**What:** final submission polish.
+
+**Corrections:**
+- `agent.py` — added an AMBIGUITY note so the model doesn't relabel an
+  unrelated "PMF" (e.g. Adam Fishman's "People, Mission, Financials"
+  job-evaluation framework) as product-market fit.
+- Defaulted the local chat model to `qwen2.5:7b` (stronger tool-calling at a
+  similar size to llama3.1) across `config.py`, `.env.example`, `run.sh`,
+  README, architecture/demo/manual docs, and the provider modal; rebuilt the
+  frontend static bundle to match.
+
+**Result:** 54 tests pass; frontend builds clean.
