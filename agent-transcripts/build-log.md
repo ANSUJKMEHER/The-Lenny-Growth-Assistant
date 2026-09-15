@@ -348,3 +348,22 @@ the broken `seed_samples` path. Added a regression test that calls
 
 **Result:** 49 tests pass; `seed_samples` seeds 3 sources/6 chunks; `ensure_corpus`
 still seeds samples when the network fetch fails.
+
+## Iteration 14 — Force grounding when a local model skips search
+
+**What:** after the data-source + seed fixes, the demo still intermittently
+returned "I'm unable to find the information you requested" — even though the
+corpus had the answer. Root cause: a local Ollama model (llama3.1) sometimes
+answers *without* invoking `search_transcripts` (especially on a cold start),
+producing a vague or "can't find it" reply despite populated data.
+
+**Corrections:**
+- In the built-in agent loop, if the model returns a substantive answer with no
+  tool calls and no citations this turn, the agent now runs `search_transcripts`
+  itself and re-answers on the retrieved material (single bounded re-prompt).
+  This guarantees every substantive answer is source-backed regardless of
+  whether the model chose to search.
+- Added a regression test: a model that answers "unable to find" without
+  searching is still grounded (citations attached, grounded answer returned).
+
+**Result:** 50 tests pass.

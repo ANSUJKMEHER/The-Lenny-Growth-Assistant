@@ -175,3 +175,26 @@ async def test_agent_refuses_direct_code_answer(db):
     assert "Lenny Growth Assistant" in result.content
     assert result.grounded is False
     assert "print" not in result.content
+
+
+async def test_agent_force_grounds_when_model_skips_search(db):
+    """Regression: if a (local) model answers without invoking search, the agent
+    must still retrieve and re-answer so the response is grounded, not a vague
+    "I'm unable to find the information" reply."""
+    await ingest.ingest_document(db, SAMPLE, title="Fit 101", episode_id="101")
+    await db.commit()
+
+    provider = FakeProvider(
+        [
+            LLMResponse(content="I'm unable to find the information you requested."),
+            LLMResponse(content="Product-market fit means the value hypothesis is true."),
+        ]
+    )
+    ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
+    result = await Agent(provider).run(
+        ctx, [ChatMessage(role="user", content="what is product-market fit?")]
+    )
+
+    assert result.grounded is True
+    assert ctx.citations, "force-grounding must retrieve and attach citations"
+    assert "value hypothesis" in result.content

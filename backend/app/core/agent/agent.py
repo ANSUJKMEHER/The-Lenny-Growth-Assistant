@@ -256,6 +256,37 @@ class Agent:
                 )
                 return
 
+            # Force grounding: local models sometimes answer without invoking
+            # search_transcripts (especially on a cold start), producing a vague
+            # or "I can't find it" response. If the model returned a substantive
+            # answer with no retrieval this turn, search now and re-answer on the
+            # grounded material so every answer is source-backed.
+            if not trace and not ctx.citations and content.strip():
+                search = self._by_name.get("search_transcripts")
+                if search is not None:
+                    yield AgentEvent(kind="tool", data="search_transcripts")
+                    search_result = await search.run(ctx, query=last_user)
+                    if ctx.citations:
+                        messages.append(ChatMessage(role="assistant", content=content))
+                        messages.append(
+                            ChatMessage(
+                                role="user",
+                                content=(
+                                    "Answer the user's original question using ONLY the "
+                                    "retrieved Lenny's Podcast material below. Be specific "
+                                    "and cite the episode/speaker. Do not invent facts.\n\n"
+                                    "Retrieved material:\n" + search_result.content
+                                ),
+                            )
+                        )
+                        grounded_parts: list[str] = []
+                        async for chunk in self.provider.stream(messages, tools=None):
+                            if chunk.text:
+                                grounded_parts.append(chunk.text)
+                                yield AgentEvent(kind="token", data=chunk.text)
+                        if grounded_parts:
+                            content = "".join(grounded_parts)
+
             yield AgentEvent(
                 kind="done",
                 result=AgentResult(
