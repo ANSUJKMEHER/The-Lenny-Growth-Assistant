@@ -55,8 +55,11 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 
 async def init_db() -> None:
-    """Create tables and run the initial ingestion seed if empty."""
+    """Create tables unless Alembic manages the schema (production)."""
     from app import models  # noqa: F401  (register models)
+
+    if not get_settings().auto_create_tables:
+        return
 
     engine = get_engine()
     async with engine.begin() as conn:

@@ -49,15 +49,16 @@ Sidebar (280px)              Main chat                    Artifact panel (520px,
 | Ungrounded / refusal | Assistant clearly states the KB doesn't cover it (no fake citations). |
 | Artifact ready | Panel slides in beside chat; latest artifact auto-selected; tabs for multiples. |
 | Model switch | Dialog lists providers with live `available`/`unavailable` state; active one highlighted. |
-| Error | Inline "something went wrong" message with the reason; a toast for transient UI errors. |
+| Error | Inline "something went wrong" message with the reason; provider-switch failures show an alert. |
 | Session hover | Each session row reveals a delete action; the active session is highlighted. |
 | Loading sessions | Session list populates; latest session auto-opens. |
 
 ## 4. Responsive behavior
 
-- **≥ 900px:** three-pane grid (sidebar · chat · artifact).
-- **< 900px:** sidebar collapses into a drawer (☰ toggle); the artifact panel goes
-  full-screen as an overlay with a close button. Chat remains the primary surface.
+- **≥ 900px:** three-pane flex layout (sidebar · chat · artifact) is the primary surface.
+- **< 900px:** desktop-first layout; the artifact panel is dismissible via its close
+  button and chat remains scrollable. A dedicated mobile drawer is a documented
+  future enhancement.
 - The composer textarea auto-grows up to 200px; long messages scroll internally.
 
 ## 5. Accessibility

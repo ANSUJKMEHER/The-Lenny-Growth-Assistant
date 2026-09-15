@@ -67,6 +67,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     max_artifact_bytes: int = 262_144
 
+    # When True, ``init_db`` creates tables at startup (dev/test convenience).
+    # Production (Docker) sets this False and lets Alembic manage the schema.
+    auto_create_tables: bool = True
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v: object) -> object:

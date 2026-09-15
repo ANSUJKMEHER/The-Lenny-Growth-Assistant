@@ -38,7 +38,7 @@ one-command startup.
 | Capability | Details |
 |---|---|
 | **Grounded chat** | RAG over **real Lenny's Podcast transcripts** (auto-fetched from the official public dataset on first boot). Answers cite the guest + episode + timestamp; the assistant admits when the corpus doesn't support an answer instead of hallucinating. A scope guard keeps it on-topic (declines code/game/general-software requests with a helpful redirect). |
-| **Streaming** | Real Server-Sent Events (SSE) token streaming with progress statuses ("Searching transcripts…") and a non-streaming fallback. The chat is fully scrollable and code blocks ship with ChatGPT-style copy buttons. |
+| **Streaming** | Real Server-Sent Events (SSE) token streaming with progress statuses ("Searching transcripts…") and a non-streaming fallback. The chat is fully scrollable and each response ships with a copy button. |
 | **Sessions** | Independent chat sessions with full history persisted in PostgreSQL. |
 | **Ship 30 for 30 skill** | A dedicated, encoded skill that turns grounded material into a ~1,250-word skimmable essay (hook, narrative arc, headings/bullets/bold, concrete takeaway) with length enforcement. |
 | **Artifact generation** | Produce Markdown documents or complete HTML/CSS snippets, rendered in a side-by-side **Artifact Viewer** with copy / download / open-in-new-tab. |
@@ -304,8 +304,9 @@ Interactive docs are served at `/docs` (Swagger) and `/redoc`.
 | `GET /api/sources` | List indexed transcript sources |
 | `GET /api/artifacts/{id}` | Fetch an artifact |
 
-Errors use a consistent envelope: `{"error": "...", "detail": "...", "code": "..."}`.
-Invalid input returns `422`; missing resources `404`; LLM/provider failures `502`/`503`.
+Unexpected (500) errors use the `{"error": "...", "detail": ...}` envelope; validation
+errors return `422` with FastAPI's `detail` shape, and missing resources return
+`404`. LLM/provider failures return `502`/`503` with a human-readable `detail`.
 
 ---
 

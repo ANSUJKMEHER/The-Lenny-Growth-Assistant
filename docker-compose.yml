@@ -32,10 +32,13 @@ services:
     environment:
       # Override the DB URL to reach the internal service regardless of .env:
       DATABASE_URL: postgresql+asyncpg://lenny:lenny@db:5432/lenny
-      # Ollama runs on the host machine; reach it via the docker host alias.
-      # On Linux this works out of the box. On macOS/Windows, set the host IP
-      # in your .env (e.g. OLLAMA_BASE_URL=http://host.docker.internal:11434).
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # Ollama runs on the HOST machine. Inside the container `localhost` is
+      # the container itself, so we always route to the host via the
+      # host-gateway alias below (works on Linux/macOS/Windows). Override via
+      # OLLAMA_BASE_URL_DOCKER only if your host Ollama listens elsewhere.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL_DOCKER:-http://host.docker.internal:11434}
+      # Schema is managed by Alembic in the container (see Dockerfile CMD).
+      AUTO_CREATE_TABLES: "false"
     ports:
       - "8000:8000"
     extra_hosts:

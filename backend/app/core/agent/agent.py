@@ -260,7 +260,11 @@ class Agent:
                 kind="done",
                 result=AgentResult(
                     content=content or "(empty response)",
-                    grounded=bool(trace and "search_transcripts" in trace),
+                    # Grounded means this turn actually attached source
+                    # citations (retrieved + cited), not merely that a tool was
+                    # invoked. Essay/artifact skills cite internally, so this is
+                    # consistent across every tool path.
+                    grounded=bool(ctx.citations),
                     tool_trace=trace,
                 ),
             )
@@ -273,7 +277,7 @@ class Agent:
                     "I reached the maximum number of tool steps while answering this. "
                     "Please ask again with a narrower question."
                 ),
-                grounded=bool(trace and "search_transcripts" in trace),
+                grounded=bool(ctx.citations),
                 tool_trace=trace,
             ),
         )

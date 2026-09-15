@@ -7,11 +7,14 @@ content hash for idempotent re-ingestion (re-running never duplicates data).
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import re
+import socket
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,6 +77,35 @@ def _extract_text_from_html(html: str) -> str:
     for tag in soup(["script", "style", "noscript", "nav", "footer", "header"]):
         tag.decompose()
     return soup.get_text("\n")
+
+
+def _validate_public_url(url: str) -> str | None:
+    """Return a reason ``url`` is unsafe to fetch server-side, else ``None``.
+
+    Rejects non-http(s) schemes and hostnames that resolve to a non-global
+    address (loopback, private, link-local incl. cloud metadata, reserved,
+    multicast). This blocks SSRF against the host and internal services.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return "only http(s) URLs are allowed"
+    host = parsed.hostname
+    if not host:
+        return "URL has no hostname"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(host, port)
+    except socket.gaierror:
+        return "could not resolve hostname"
+    for info in infos:
+        raw_ip = info[4][0]
+        try:
+            addr = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            return "could not resolve hostname"
+        if not addr.is_global:
+            return "URL resolves to a non-public address"
+    return None
 
 
 async def ingest_document(
@@ -197,14 +229,43 @@ async def ingest_directory(db: AsyncSession, directory: Path) -> IngestStats:
 
 
 async def ingest_url(db: AsyncSession, url: str, title: str | None = None) -> IngestStats:
-    """Fetch a transcript page and ingest its extracted text."""
+    """Fetch a transcript page and ingest its extracted text.
+
+    The URL is validated against SSRF (http(s) + public address only) and every
+    redirect is re-validated before it is followed, so this endpoint cannot be
+    used to probe internal services or the instance's cloud metadata.
+    """
     import httpx
 
     stats = IngestStats()
+    reason = _validate_public_url(url)
+    if reason:
+        stats.errors.append(f"Refused to fetch {url}: {reason}")
+        return stats
+
+    current = url
+    max_redirects = 3
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "lenny-growth-assistant/0.1"})
-        resp.raise_for_status()
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
+            for _ in range(max_redirects + 1):
+                reason = _validate_public_url(current)
+                if reason:
+                    stats.errors.append(f"Refused to follow {current}: {reason}")
+                    return stats
+                resp = await client.get(
+                    current, headers={"User-Agent": "lenny-growth-assistant/0.2"}
+                )
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("location")
+                    if not location:
+                        break
+                    current = urljoin(current, location)
+                    continue
+                break
+            else:
+                stats.errors.append(f"Too many redirects fetching {url}")
+                return stats
+            resp.raise_for_status()
     except Exception as exc:
         stats.errors.append(f"Failed to fetch {url}: {exc}")
         return stats

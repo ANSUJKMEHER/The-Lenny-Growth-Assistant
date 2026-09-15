@@ -29,7 +29,10 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 # Logging (structured, single-line key=value for easy grepping/log pipelines)
 # --------------------------------------------------------------------------- #
 _LOG_FORMAT = "%(asctime)s level=%(levelname)s logger=%(name)s %(message)s"
-logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT)
+logging.basicConfig(
+    level=getattr(logging, get_settings().log_level.upper(), logging.INFO),
+    format=_LOG_FORMAT,
+)
 # Quiet noisy libraries.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
@@ -126,7 +129,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("unhandled error path=%s", request.url.path)
     return JSONResponse(
         status_code=500,
-        content=ErrorResponse(error="Internal server error", detail=str(exc)).model_dump(),
+        content=ErrorResponse(error="Internal server error", detail=None).model_dump(),
     )
 
 

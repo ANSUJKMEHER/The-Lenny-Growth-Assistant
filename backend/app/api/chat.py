@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -76,6 +77,11 @@ async def _finalize_turn(
 
     if conv.title == "New chat" or conv.title is None:
         conv.title = _derive_title(user_msg.content)
+
+    # Bump the conversation so the sidebar keeps sessions ordered by recent
+    # activity (messages are added via FK, not the relationship, so the row
+    # would otherwise never be dirtied after the first turn).
+    conv.updated_at = datetime.now(timezone.utc)
 
     artifact_outs: list[ArtifactOut] = []
     for artifact in ctx.artifacts:
@@ -157,7 +163,9 @@ async def send_message(
         raise HTTPException(status_code=502, detail=f"LLM failure: {exc}") from exc
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("Agent run failed")
-        raise HTTPException(status_code=500, detail=f"Agent error: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail="The assistant failed to produce a response."
+        ) from exc
 
     return await _finalize_turn(
         db, conv, user_msg, ctx, ctx.provider, result.content, result.grounded
@@ -214,7 +222,7 @@ async def send_message_stream(
             yield sse({"type": "error", "data": f"LLM failure: {exc}"})
         except Exception as exc:  # pragma: no cover - defensive
             logger.exception("Agent stream failed")
-            yield sse({"type": "error", "data": f"Agent error: {exc}"})
+            yield sse({"type": "error", "data": "The assistant failed to produce a response."})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

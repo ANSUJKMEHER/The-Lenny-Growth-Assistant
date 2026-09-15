@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import DOMPurify from "dompurify";
 import { X, Copy, Download, ExternalLink, Check, FileText, Code } from "lucide-react";
 import { Artifact } from "../../utils/types";
 import { renderMarkdownToSafeHtml } from "../../utils/markdown";
@@ -46,15 +47,27 @@ export const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
 
   const handleOpenInNewTab = () => {
     if (currentArtifact.kind === "html") {
+      // Defense-in-depth: re-sanitize client-side and render inside a fully
+      // sandboxed iframe in the new tab, so generated HTML can never run
+      // scripts — even in a top-level window.
+      const clean = DOMPurify.sanitize(currentArtifact.content, {
+        USE_PROFILES: { html: true },
+      });
       const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(currentArtifact.content);
-        win.document.close();
-      }
+      if (!win) return;
+      win.opener = null;
+      win.document.title = currentArtifact.title;
+      win.document.body.style.margin = "0";
+      const frame = win.document.createElement("iframe");
+      frame.setAttribute("sandbox", "");
+      frame.setAttribute("referrerpolicy", "no-referrer");
+      frame.style.cssText = "width:100%;height:100vh;border:0;";
+      frame.srcdoc = clean;
+      win.document.body.appendChild(frame);
     } else {
       const blob = new Blob([currentArtifact.content], { type: "text/markdown" });
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      window.open(url, "_blank", "noopener");
     }
   };
 

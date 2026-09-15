@@ -7,6 +7,37 @@ export interface StreamCallbacks {
   onError?: (err: Error) => void;
 }
 
+/** Extract the joined `data:` payload from a single SSE event block. */
+export function parseSseBlock(block: string): string | null {
+  if (!block.trim()) return null;
+  let dataStr = "";
+  for (const line of block.split("\n")) {
+    if (line.startsWith("data:")) {
+      dataStr += line.slice(5).trim();
+    }
+  }
+  return dataStr || null;
+}
+
+async function fallbackToStandard(
+  sessionId: string,
+  content: string,
+  callbacks: StreamCallbacks
+): Promise<void> {
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || data.error || "Request failed");
+    callbacks.onDone?.(data.message, data.artifacts || []);
+  } catch (err: any) {
+    callbacks.onError?.(err);
+  }
+}
+
 export async function streamMessage(
   sessionId: string,
   content: string,
@@ -14,8 +45,9 @@ export async function streamMessage(
 ): Promise<void> {
   const url = `/api/sessions/${sessionId}/messages/stream`;
 
+  let response: Response;
   try {
-    const response = await fetch(url, {
+    response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -23,20 +55,30 @@ export async function streamMessage(
       },
       body: JSON.stringify({ content }),
     });
+  } catch (err) {
+    // The streaming endpoint is unreachable — fall back to the standard API.
+    console.warn("Streaming endpoint unreachable, falling back:", err);
+    return fallbackToStandard(sessionId, content, callbacks);
+  }
 
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.detail || errData.error || `HTTP ${response.status}`);
-    }
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    callbacks.onError?.(
+      new Error(errData.detail || errData.error || `HTTP ${response.status}`)
+    );
+    return;
+  }
 
-    if (!response.body) {
-      throw new Error("ReadableStream not supported by browser.");
-    }
+  if (!response.body) {
+    callbacks.onError?.(new Error("ReadableStream not supported by browser."));
+    return;
+  }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
 
+  try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -46,24 +88,11 @@ export async function streamMessage(
       buffer = blocks.pop() || "";
 
       for (const block of blocks) {
-        if (!block.trim()) continue;
-
-        let dataStr = "";
-
-        const lines = block.split("\n");
-        for (const line of lines) {
-          if (line.startsWith("data:")) {
-            dataStr += line.slice(5).trim();
-          }
-        }
-
+        const dataStr = parseSseBlock(block);
         if (!dataStr) continue;
 
         try {
           const parsed = JSON.parse(dataStr);
-          // The backend serializes each event as a JSON object whose `type`
-          // field carries the event name and whose `data` field carries the
-          // payload (e.g. {"type":"token","data":"…"}). Dispatch on `type`.
           const type: string = parsed.type || "message";
 
           switch (type) {
@@ -87,20 +116,10 @@ export async function streamMessage(
         }
       }
     }
-  } catch (err: any) {
-    // Non-streaming fallback if stream endpoint failed
-    console.warn("Streaming failed, falling back to standard API:", err);
-    try {
-      const fallbackRes = await fetch(`/api/sessions/${sessionId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      const data = await fallbackRes.json();
-      if (!fallbackRes.ok) throw new Error(data.detail || data.error || "Request failed");
-      callbacks.onDone?.(data.message, data.artifacts || []);
-    } catch (fallbackErr: any) {
-      callbacks.onError?.(fallbackErr);
-    }
+  } catch (err) {
+    // A mid-stream transport failure must NOT re-send the message (that would
+    // duplicate the user + assistant turn). Surface an error instead.
+    console.warn("Stream interrupted:", err);
+    callbacks.onError?.(new Error("Connection interrupted while streaming. Please retry."));
   }
 }

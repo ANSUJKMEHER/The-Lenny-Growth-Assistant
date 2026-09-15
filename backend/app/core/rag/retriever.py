@@ -121,17 +121,14 @@ class Retriever:
             key=lambda t: t[0],
             reverse=True,
         )
-        results = [
+        # No matches means no matches: return [] so the assistant honestly
+        # reports that the knowledge base does not cover the question, instead
+        # of being handed an irrelevant chunk it might cite as relevant.
+        return [
             self._to_result(c, s, score, "bm25")
             for score, (c, s) in scored[:top_k]
             if score > 0
         ]
-        if not results and query.strip():
-            # Absolute last resort: return the first chunk so the assistant can
-            # still acknowledge the corpus rather than fabricate.
-            c, s = chunks[0]
-            results = [self._to_result(c, s, 0.0, "bm25")]
-        return results
 
     @staticmethod
     def _to_result(

@@ -19,7 +19,7 @@ Automated tests cover API, retrieval, ingestion, security, and agent routing
 | 9 | With multiple artifacts, click the tabs | Viewer switches between artifacts. | ☐ |
 | 10 | Sidebar → provider button → select a provider | Dialog lists providers with available/unavailable state; active one highlighted; badge updates. | ☐ |
 | 11 | Click "New chat" then an old session in the sidebar | Each session shows **only its own** messages + artifacts (independent context). | ☐ |
-| 12 | Resize window below 900px | Sidebar collapses to a ☰ drawer; artifact panel becomes full-screen overlay; layout remains usable. | ☐ |
+| 12 | Resize window below 900px | Layout remains usable and scrollable; the artifact panel closes via ✕. (A dedicated mobile drawer is a future enhancement.) | ☐ |
 | 13 | Keyboard: Tab through the UI; Enter sends; Shift+Enter newline | All controls reachable and focus-visible; send works as expected. | ☐ |
 | 13b | Sidebar → theme toggle | UI switches between light and dark; choice persists across reload. | ☐ |
 | 13c | Click a citation card (after a grounded answer) | The source excerpt expands/collapses. | ☐ |

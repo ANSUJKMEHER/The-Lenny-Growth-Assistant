@@ -46,18 +46,26 @@ async def get_config(db: AsyncSession = Depends(get_db)) -> ConfigOut:
 async def update_config(
     body: ConfigUpdate, db: AsyncSession = Depends(get_db)
 ) -> ConfigOut:
+    # Validate the target provider BEFORE persisting anything, so a failed
+    # switch never leaves the app stuck on a broken provider.
+    model = body.model or await settings_store.get_runtime_model(db, body.provider)
+    try:
+        instance = build_provider(body.provider, model)
+        ok, reason = await instance.healthcheck()
+    except ProviderError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Provider '{body.provider.value}' is not available: {exc}",
+        ) from exc
+    if not ok:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Provider '{body.provider.value}' is not available: {reason}",
+        )
+
     await settings_store.set_runtime_provider(db, body.provider)
     if body.model:
         await settings_store.set_runtime_model(db, body.provider, body.model)
     await db.commit()
-
-    # Validate the newly selected provider is actually usable; surface a helpful
-    # error otherwise (the client can still switch, but should know it's broken).
-    info = await _provider_info(db, body.provider)
-    if not info.available:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Provider '{body.provider.value}' selected but unavailable: {info.reason}",
-        )
 
     return await get_config(db)

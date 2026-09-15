@@ -271,3 +271,50 @@ were introduced together:
 matched across blank lines, causing a timestamp-only `(HH:MM:SS):` to swallow the
 preceding paragraph. Tightened to `^[ \t]*` + `[ \t]+`/`[ \t]*` and anchored with
 `re.MULTILINE`; the new regression tests pin this behavior.
+
+## Iteration 12 — Full audit remediation (grounding, security, ops, migrations)
+
+**What:** a complete code audit surfaced 15+ concrete issues across grounding,
+security, LLM conversion, config, health, ops, and frontend. Fixes below.
+
+**Corrections:**
+- **Grounding signal** — `grounded` now means "this turn attached ≥1 source
+  citation" (`bool(ctx.citations)`), not "the search tool was invoked". The
+  built-in loop and the Claude SDK runtime now agree, and `generate_artifact`
+  attaches citations for the passages it grounds on (previously only the essay
+  skill did).
+- **SSRF / KB poisoning** — `ingest_url` now validates http(s)+public-address
+  only and re-validates every redirect hop, blocking loopback/private/link-local/
+  metadata targets.
+- **Provider switch** — `PUT /api/config` validates availability *before*
+  persisting, so a failed switch no longer leaves the app on a broken provider.
+- **Docker/Ollama** — the compose service now routes Ollama to the host via
+  `host.docker.internal` (host-gateway) using a dedicated `OLLAMA_BASE_URL_DOCKER`
+  var, instead of inheriting the host-`localhost` value from `.env` and pointing
+  the container at itself.
+- **Migrations** — added Alembic (async env, initial 0001 migration) wired into
+  the Docker CMD; `AUTO_CREATE_TABLES=false` in the container, `create_all`
+  retained for dev/tests.
+- **Artifact safety** — the "open in new tab" path now re-sanitizes with DOMPurify
+  and renders in a sandboxed iframe (`noopener`), closing the defense-in-depth gap.
+- **Session ordering** — `_finalize_turn` now bumps `conversation.updated_at`.
+- **Readiness** — `/health/ready` reports the *active* provider and returns 503
+  when not ready.
+- **Anthropic** — consecutive tool results are collapsed into a single user
+  message (fixes multi-tool-turn 400s).
+- **Retriever** — removed the "last resort returns an irrelevant chunk" branch;
+  no-match now returns `[]` (honest "unsupported").
+- **SSE client** — mid-stream transport failures no longer re-send the message
+  (no duplicate turns); only the initial request falls back to non-streaming.
+- **Errors/logging** — no internal exception text is leaked to clients; `LOG_LEVEL`
+  is honored; `:focus-visible` + `prefers-reduced-motion` added.
+- **Frontend tests** — added Vitest + jsdom with 6 tests (markdown XSS + SSE
+  parsing) and a CI job.
+
+**Failure / correction:** the first `_TURN_LABEL_RE`-style edit attempt hit a
+whitespace mismatch (block indentation), which the atomic edit tool rejected; re-
+applied with exact indentation. The Alembic migration was validated against
+SQLite (`upgrade` + `downgrade base`) before committing.
+
+**Result:** backend 48 passed; frontend 6 passed; `tsc` + `vite build` clean;
+Alembic `upgrade head`/`downgrade base` verified on SQLite.

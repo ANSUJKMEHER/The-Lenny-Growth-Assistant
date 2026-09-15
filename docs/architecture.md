@@ -60,8 +60,9 @@ If the corpus grew, swapping to pgvector is a drop-in change inside `retriever.p
 
 ## 3. API contracts
 
-All responses are JSON; errors use one envelope. See `schemas.py` for the exact
-Pydantic shapes and `/docs` for the live OpenAPI spec.
+All responses are JSON. Unexpected errors use the `ErrorResponse` envelope
+(`{"error", "detail"}`); validation and HTTP errors use FastAPI's `detail` shape.
+See `schemas.py` for the exact Pydantic shapes and `/docs` for the live OpenAPI spec.
 
 ```
 POST /api/sessions {title?, user_id?}            → 201 ConversationOut

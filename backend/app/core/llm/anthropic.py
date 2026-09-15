@@ -42,26 +42,32 @@ class AnthropicProvider(LLMProvider):
         return "\n\n".join(parts) if parts else None
 
     def _to_anthropic(self, messages: list[ChatMessage]) -> list[dict]:
+        # Anthropic requires each assistant tool_use turn to be followed by a
+        # SINGLE user message containing ALL of its tool_result blocks. Consecutive
+        # ``tool`` messages (one per call in our loop) must therefore be collapsed
+        # into one user message, or multi-tool turns fail with a 400.
         out: list[dict] = []
-        for m in messages:
+        i = 0
+        while i < len(messages):
+            m = messages[i]
             if m.role == "system":
+                i += 1
                 continue
             if m.role == "tool":
-                out.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": m.tool_call_id,
-                                "content": m.content,
-                            }
-                        ],
-                    }
-                )
+                blocks: list[dict] = []
+                while i < len(messages) and messages[i].role == "tool":
+                    blocks.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": messages[i].tool_call_id,
+                            "content": messages[i].content,
+                        }
+                    )
+                    i += 1
+                out.append({"role": "user", "content": blocks})
                 continue
             if m.role == "assistant" and m.tool_calls:
-                blocks: list[dict] = []
+                blocks = []
                 if m.content:
                     blocks.append({"type": "text", "text": m.content})
                 for tc in m.tool_calls:
@@ -74,8 +80,10 @@ class AnthropicProvider(LLMProvider):
                         }
                     )
                 out.append({"role": "assistant", "content": blocks})
+                i += 1
                 continue
             out.append({"role": m.role, "content": m.content})
+            i += 1
         return out
 
     def _to_tools(self, tools: list[ToolSpec] | None) -> list[dict] | None:

@@ -256,6 +256,16 @@ class GenerateArtifactSkill(Tool):
         if passages:
             joined = "\n\n".join(p.text for p in passages)
             grounding = f"\n\nRelevant transcript material to draw on:\n{joined}"
+            for p in passages:
+                ctx.add_citation(
+                    p.source_id,
+                    p.title,
+                    p.chunk_index,
+                    p.text[:280],
+                    speaker=p.speaker,
+                    timestamp=p.timestamp,
+                    url=p.url,
+                )
 
         if kind == "html":
             fmt_instruction = (
