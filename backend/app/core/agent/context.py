@@ -33,6 +33,13 @@ class ToolContext:
         timestamp: str | None = None,
         url: str | None = None,
     ) -> None:
+        # Skip exact duplicates (same source + chunk) so retrieve-first plus a
+        # model-initiated search don't emit the same source twice in the UI.
+        if any(
+            c.source_id == source_id and c.chunk_index == chunk_index
+            for c in self.citations
+        ):
+            return
         self.citations.append(
             Citation(
                 source_id=source_id,

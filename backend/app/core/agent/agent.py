@@ -301,6 +301,45 @@ class Agent:
         tool_specs = [t.spec() for t in self.tools]
         trace: list[str] = []
 
+        # Retrieve-first: deterministically fetch the most relevant passages
+        # BEFORE the model generates, so a substantive question is answered in a
+        # single generation (halving latency on CPU) and grounding no longer
+        # depends on whether the model chooses to call the search tool.
+        retrieved = None
+        if _is_substantive(last_user):
+            retrieved = await ctx.retriever.retrieve(
+                ctx.db, last_user, top_k=get_settings().retrieval_top_k
+            )
+            if retrieved:
+                for r in retrieved:
+                    ctx.add_citation(
+                        r.source_id,
+                        r.title,
+                        r.chunk_index,
+                        r.text[:280],
+                        speaker=r.speaker,
+                        timestamp=r.timestamp,
+                        url=r.url,
+                    )
+                yield AgentEvent(kind="tool", data="search_transcripts")
+                messages.append(
+                    ChatMessage(
+                        role="user",
+                        content=(
+                            "Relevant Lenny's Podcast passages are provided below "
+                            "(already retrieved — do not call search_transcripts again). "
+                            "If the user's request maps to a tool (Ship 30 essay, "
+                            "artifact, or listing sources), use that tool as usual. "
+                            "Otherwise answer the user's question using ONLY these "
+                            "passages: quote or closely paraphrase them, name the "
+                            "episode and guest, and tag each point with its bracketed "
+                            "number (e.g. [1], [2]). Do not give generic advice, do "
+                            "not invent facts, and do not answer from outside "
+                            "knowledge.\n\n" + _format_passages(retrieved)
+                        ),
+                    )
+                )
+
         for _ in range(MAX_ITERATIONS):
             text_parts: list[str] = []
             tool_calls: list[ToolCall] = []
@@ -310,12 +349,9 @@ class Agent:
                     tool_calls.extend(chunk.tool_calls)
                 if chunk.text:
                     text_parts.append(chunk.text)
-                    # Only stream answer text after a tool has already run (trace
-                    # is non-empty). The first-pass answer is buffered because it
-                    # may need force-grounding: if the model answered without
-                    # searching we replace it with a grounded answer, and we don't
-                    # want to have already streamed the generic text to the client.
-                    if not chunk.tool_calls and not tool_calls and trace:
+                    # Stream answer text live. Retrieval already ran, so the
+                    # first answer is grounded and does not need buffering.
+                    if not chunk.tool_calls and not tool_calls:
                         yield AgentEvent(kind="token", data=chunk.text)
 
             if tool_calls:
@@ -337,7 +373,6 @@ class Agent:
                 continue
 
             content = "".join(text_parts)
-            retrieved = None
 
             # Defense in depth: if the model answered with a code block directly
             # (no tool was used), it ignored the scope guard. Swap in the branded
@@ -350,71 +385,15 @@ class Agent:
                 )
                 return
 
-            # ---- Grounding guarantee --------------------------------------
-            # Local models often answer without searching, search with a
-            # malformed query (so the tool returns no citations), or search and
-            # then ignore the passages and produce generic advice. We therefore
-            # (1) retrieve deterministically whenever this turn has no citations,
-            # (2) re-answer on readable (non-JSON) passages, and (3) fall back to
-            # a verbatim, source-tagged answer if the model still won't cite a
-            # source. This makes grounding independent of the model's tool-calling
-            # ability.
-            if not ctx.citations and _is_substantive(last_user):
-                retrieved = await ctx.retriever.retrieve(
-                    ctx.db, last_user, top_k=get_settings().retrieval_top_k
-                )
-                if retrieved:
-                    for r in retrieved:
-                        ctx.add_citation(
-                            r.source_id,
-                            r.title,
-                            r.chunk_index,
-                            r.text[:280],
-                            speaker=r.speaker,
-                            timestamp=r.timestamp,
-                            url=r.url,
-                        )
-                    yield AgentEvent(kind="tool", data="search_transcripts")
-                    messages.append(ChatMessage(role="assistant", content=content))
-                    messages.append(
-                        ChatMessage(
-                            role="user",
-                            content=(
-                                "Answer the user's original question using ONLY the "
-                                "retrieved Lenny's Podcast passages below. Quote or closely "
-                                "paraphrase them, name the episode and speaker, and tag each "
-                                "point with its bracketed source number (e.g. [1], [2]). Do "
-                                "not give generic advice, do not invent facts, and do not "
-                                "answer from outside knowledge.\n\nRetrieved passages:\n"
-                                + _format_passages(retrieved)
-                            ),
-                        )
-                    )
-                    grounded_parts: list[str] = []
-                    async for chunk in self.provider.stream(messages, tools=None):
-                        if chunk.text:
-                            grounded_parts.append(chunk.text)
-                    if grounded_parts:
-                        content = "".join(grounded_parts)
-
             # If the model still produced an un-grounded answer despite having
             # retrieved material, substitute a verbatim, source-tagged answer so
             # the response is never generic fluff.
             if ctx.citations and not _mentions_source(content, ctx.citations):
-                passages = retrieved
-                if not passages:
-                    passages = await ctx.retriever.retrieve(
-                        ctx.db, last_user, top_k=get_settings().retrieval_top_k
-                    )
+                passages = retrieved or await ctx.retriever.retrieve(
+                    ctx.db, last_user, top_k=get_settings().retrieval_top_k
+                )
                 if passages:
                     content = _build_grounded_answer(passages)
-
-            # The first-pass answer is buffered (not streamed) so the client never
-            # shows an un-grounded draft. Emit the final content once now that the
-            # grounding decision is made. (Answers that already streamed during a
-            # post-tool pass are left untouched.)
-            if not trace:
-                yield AgentEvent(kind="token", data=content or "")
 
             yield AgentEvent(
                 kind="done",

@@ -441,3 +441,23 @@ the good answer was replaced.
 - Added regression test: a speaker-cited answer is kept, not replaced.
 
 **Result:** 53 tests pass.
+
+## Iteration 18 — Halve latency: retrieve-first, single-generation answers
+
+**What:** with qwen2.5 the answers were finally grounded and cited, but the first
+token arrived after ~120s. Root cause: the agent made two LLM generations per
+question (model search → answer, or answer → deterministic re-answer), each ~60s
+on CPU.
+
+**Corrections:**
+- `agent.py` — retrieve-first: for substantive questions the agent now retrieves
+  the top passages *before* the model generates, injects them into the prompt
+  (with an instruction not to re-search), and streams the single answer live. The
+  reactive re-answer pass was removed. This drops a plain question to one
+  generation (~60s) and makes grounding independent of tool-calling.
+- `context.py` — `add_citation` dedupes by (source_id, chunk_index) so
+  retrieve-first + a model-initiated search don't duplicate sources in the UI.
+- Added regression tests: a plain question uses a single LLM call; a
+  speaker-cited answer is not replaced by the fallback.
+
+**Result:** 54 tests pass.

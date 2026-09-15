@@ -288,8 +288,7 @@ async def test_agent_does_not_fallback_when_model_cites_speaker(db):
     good = "Adam Grenier advises assuming you no longer have product-market fit."
     provider = FakeProvider(
         [
-            LLMResponse(content="Product-market fit is important."),  # no search
-            LLMResponse(content=good),  # deterministic re-answer, cited by guest name
+            LLMResponse(content=good),  # retrieve-first → single grounded answer
         ]
     )
     ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
@@ -303,3 +302,24 @@ async def test_agent_does_not_fallback_when_model_cites_speaker(db):
     # The speaker-cited answer must be kept, not replaced by the verbatim fallback.
     assert result.content == good
     assert "Here's what Lenny's Podcast says" not in result.content
+
+
+async def test_agent_answers_in_single_generation(db):
+    """Regression: retrieve-first means a plain question needs a single LLM
+    generation (no search-then-answer round-trip), keeping latency to one pass."""
+    await ingest.ingest_document(
+        db, SAMPLE, title="Fit 101", episode_id="101", speaker="Lenny Rachitsky"
+    )
+    await db.commit()
+
+    provider = FakeProvider(
+        [LLMResponse(content="Product-market fit means the value hypothesis is true. [1]")]
+    )
+    ctx = ToolContext(db=db, conversation_id="c", provider=provider, retriever=Retriever())
+    result = await Agent(provider).run(
+        ctx, [ChatMessage(role="user", content="What is product-market fit?")]
+    )
+
+    assert len(provider.calls) == 1
+    assert result.grounded is True
+    assert ctx.citations
