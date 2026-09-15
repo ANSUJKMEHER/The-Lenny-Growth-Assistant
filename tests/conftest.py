@@ -21,6 +21,7 @@ _DB_FILE = Path(tempfile.gettempdir()) / "lenny_test.db"
 if _DB_FILE.exists():
     _DB_FILE.unlink()
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_DB_FILE}"
+os.environ["AUTO_CREATE_TABLES"] = "true"
 os.environ["LLM_PROVIDER"] = "ollama"
 os.environ["OLLAMA_BASE_URL"] = "http://127.0.0.1:9"  # guaranteed-unreachable
 os.environ["LLM_FALLBACK_ENABLED"] = "false"
